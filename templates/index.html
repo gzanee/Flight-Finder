@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Finder - Voli economici da VCE/TSF</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .flight-card {
+            transition: all 0.2s ease;
+        }
+        .flight-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-8 shadow-lg">
+        <div class="container mx-auto px-4">
+            <h1 class="text-3xl font-bold flex items-center gap-3">
+                <i class="fas fa-plane"></i>
+                Flight Finder
+            </h1>
+            <p class="mt-2 text-blue-100">Trova voli economici da Venezia e Treviso</p>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <!-- Search Form -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold text-gray-800 mb-6 flex items-center gap-2">
+                <i class="fas fa-search text-blue-600"></i>
+                Cerca Voli
+            </h2>
+            
+            <form id="searchForm" class="space-y-6">
+                <!-- Row 1: Airports -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Origin -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-plane-departure text-gray-400 mr-1"></i>
+                            Partenza da
+                        </label>
+                        <select id="origin" name="origin" 
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="VCE">VCE - Venezia Marco Polo</option>
+                            <option value="TSF">TSF - Treviso Antonio Canova</option>
+                            <option value="BOTH">Entrambi (VCE + TSF)</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Destination -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-plane-arrival text-gray-400 mr-1"></i>
+                            Destinazione
+                        </label>
+                        <div class="relative">
+                            <input type="text" id="destination" name="destination" 
+                                   placeholder="Ovunque (lascia vuoto) o cerca aeroporto..."
+                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                   autocomplete="off">
+                            <div id="airportSuggestions" 
+                                 class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 hidden max-h-60 overflow-y-auto">
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Lascia vuoto per cercare ovunque</p>
+                    </div>
+                </div>
+
+                <!-- Row 2: Dates -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Departure Date -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-calendar text-gray-400 mr-1"></i>
+                            Data Andata
+                        </label>
+                        <input type="date" id="departureDate" name="departure_date" required
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    
+                    <!-- Return Date -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-calendar-alt text-gray-400 mr-1"></i>
+                            Data Ritorno
+                        </label>
+                        <input type="date" id="returnDate" name="return_date"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <p class="text-xs text-gray-500 mt-1">Lascia vuoto per solo andata</p>
+                    </div>
+                </div>
+
+                <!-- Row 3: Times -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Departure Time Min -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-clock text-gray-400 mr-1"></i>
+                            Partenza andata dalle ore
+                        </label>
+                        <input type="time" id="departureTimeMin" name="departure_time_min" value="00:00"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    
+                    <!-- Return Time Min -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-clock text-gray-400 mr-1"></i>
+                            Partenza ritorno dalle ore
+                        </label>
+                        <input type="time" id="returnTimeMin" name="return_time_min" value="00:00"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                </div>
+
+                <!-- Row 4: Filters -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Max Price -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-euro-sign text-gray-400 mr-1"></i>
+                            Prezzo massimo (€)
+                        </label>
+                        <input type="number" id="maxPrice" name="max_price" value="100" min="1" max="2000"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    
+                    <!-- Adults -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-user text-gray-400 mr-1"></i>
+                            Passeggeri
+                        </label>
+                        <select id="adults" name="adults"
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="1">1 adulto</option>
+                            <option value="2">2 adulti</option>
+                            <option value="3">3 adulti</option>
+                            <option value="4">4 adulti</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Direct Only -->
+                    <div class="flex items-end">
+                        <label class="flex items-center gap-3 cursor-pointer py-3">
+                            <input type="checkbox" id="directOnly" name="direct_only" checked
+                                   class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500">
+                            <span class="text-sm font-medium text-gray-700">
+                                <i class="fas fa-route text-gray-400 mr-1"></i>
+                                Solo voli diretti
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="flex gap-4">
+                    <button type="submit" id="searchBtn"
+                            class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition flex items-center justify-center gap-2">
+                        <i class="fas fa-search"></i>
+                        Cerca Voli
+                    </button>
+                    <button type="button" id="inspirationBtn"
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg transition flex items-center justify-center gap-2">
+                        <i class="fas fa-lightbulb"></i>
+                        Ispirami
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading" class="hidden text-center py-12">
+            <div class="loader mx-auto mb-4"></div>
+            <p class="text-gray-600">Cerco i voli migliori per te...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="error" class="hidden bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div class="flex items-center gap-2 text-red-700">
+                <i class="fas fa-exclamation-circle"></i>
+                <span id="errorMessage"></span>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div id="results" class="hidden">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                    <i class="fas fa-list text-blue-600"></i>
+                    Risultati
+                    <span id="resultsCount" class="text-sm font-normal text-gray-500"></span>
+                </h2>
+                <div class="flex gap-2">
+                    <button id="sortPrice" class="text-sm px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded transition">
+                        <i class="fas fa-sort-amount-down"></i> Prezzo
+                    </button>
+                    <button id="sortTime" class="text-sm px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded transition">
+                        <i class="fas fa-clock"></i> Orario
+                    </button>
+                </div>
+            </div>
+            
+            <div id="flightsList" class="space-y-4">
+                <!-- Flight cards will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Inspiration Results -->
+        <div id="inspirationResults" class="hidden">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <i class="fas fa-lightbulb text-yellow-500"></i>
+                Destinazioni Economiche
+            </h2>
+            <div id="destinationsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Destination cards will be inserted here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-gray-400 py-6 mt-12">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-sm">
+                Powered by <a href="https://developers.amadeus.com" target="_blank" class="text-blue-400 hover:underline">Amadeus API</a>
+                &bull; I prezzi sono indicativi e soggetti a disponibilità
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // State
+        let currentFlights = [];
+        let selectedDestinationCode = null;
+        
+        // DOM Elements
+        const searchForm = document.getElementById('searchForm');
+        const searchBtn = document.getElementById('searchBtn');
+        const inspirationBtn = document.getElementById('inspirationBtn');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const errorMessage = document.getElementById('errorMessage');
+        const results = document.getElementById('results');
+        const resultsCount = document.getElementById('resultsCount');
+        const flightsList = document.getElementById('flightsList');
+        const inspirationResults = document.getElementById('inspirationResults');
+        const destinationsList = document.getElementById('destinationsList');
+        const destinationInput = document.getElementById('destination');
+        const airportSuggestions = document.getElementById('airportSuggestions');
+        
+        // Set default dates (next Friday and Sunday)
+        function setDefaultDates() {
+            const today = new Date();
+            const nextFriday = new Date(today);
+            nextFriday.setDate(today.getDate() + ((5 - today.getDay() + 7) % 7 || 7));
+            
+            const nextSunday = new Date(nextFriday);
+            nextSunday.setDate(nextFriday.getDate() + 2);
+            
+            document.getElementById('departureDate').value = formatDate(nextFriday);
+            document.getElementById('returnDate').value = formatDate(nextSunday);
+            document.getElementById('departureTimeMin').value = '18:00';
+            document.getElementById('returnTimeMin').value = '15:00';
+        }
+        
+        function formatDate(date) {
+            return date.toISOString().split('T')[0];
+        }
+        
+        // Airport search with debounce
+        let searchTimeout;
+        destinationInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            const keyword = e.target.value.trim();
+            
+            if (keyword.length < 2) {
+                airportSuggestions.classList.add('hidden');
+                selectedDestinationCode = null;
+                return;
+            }
+            
+            searchTimeout = setTimeout(() => searchAirports(keyword), 300);
+        });
+        
+        async function searchAirports(keyword) {
+            try {
+                const response = await fetch(`/api/airports/search?keyword=${encodeURIComponent(keyword)}`);
+                const data = await response.json();
+                
+                if (data.success && data.airports.length > 0) {
+                    airportSuggestions.innerHTML = data.airports.map(a => `
+                        <div class="px-4 py-2 hover:bg-blue-50 cursor-pointer" 
+                             onclick="selectAirport('${a.code}', '${a.name}', '${a.city || ''}')">
+                            <span class="font-semibold text-blue-600">${a.code}</span>
+                            <span class="text-gray-700"> - ${a.name}</span>
+                            ${a.city ? `<span class="text-gray-500 text-sm">(${a.city})</span>` : ''}
+                        </div>
+                    `).join('');
+                    airportSuggestions.classList.remove('hidden');
+                } else {
+                    airportSuggestions.classList.add('hidden');
+                }
+            } catch (err) {
+                console.error('Airport search error:', err);
+            }
+        }
+        
+        function selectAirport(code, name, city) {
+            destinationInput.value = `${code} - ${name}`;
+            selectedDestinationCode = code;
+            airportSuggestions.classList.add('hidden');
+        }
+        
+        // Hide suggestions when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!destinationInput.contains(e.target) && !airportSuggestions.contains(e.target)) {
+                airportSuggestions.classList.add('hidden');
+            }
+        });
+        
+        // Main search
+        searchForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await searchFlights();
+        });
+        
+        async function searchFlights() {
+            showLoading();
+            hideError();
+            hideResults();
+            
+            const origins = document.getElementById('origin').value;
+            const searchOrigins = origins === 'BOTH' ? ['VCE', 'TSF'] : [origins];
+            
+            let allFlights = [];
+            
+            for (const origin of searchOrigins) {
+                const params = {
+                    origin: origin,
+                    destination: selectedDestinationCode || null,
+                    departure_date: document.getElementById('departureDate').value,
+                    return_date: document.getElementById('returnDate').value || null,
+                    max_price: parseInt(document.getElementById('maxPrice').value),
+                    direct_only: document.getElementById('directOnly').checked,
+                    departure_time_min: document.getElementById('departureTimeMin').value,
+                    return_time_min: document.getElementById('returnTimeMin').value,
+                    adults: parseInt(document.getElementById('adults').value)
+                };
+                
+                try {
+                    const response = await fetch('/api/search/flights', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(params)
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success && data.flights) {
+                        allFlights = allFlights.concat(data.flights);
+                    }
+                } catch (err) {
+                    console.error(`Search error for ${origin}:`, err);
+                }
+            }
+            
+            hideLoading();
+            
+            if (allFlights.length > 0) {
+                currentFlights = allFlights;
+                sortByPrice();
+                showResults();
+            } else {
+                showError('Nessun volo trovato con i criteri selezionati. Prova ad aumentare il budget o modificare le date.');
+            }
+        }
+        
+        // Inspiration search
+        inspirationBtn.addEventListener('click', async () => {
+            showLoading();
+            hideError();
+            hideResults();
+            
+            const origin = document.getElementById('origin').value === 'BOTH' ? 'VCE' : document.getElementById('origin').value;
+            
+            const params = {
+                origin: origin,
+                departure_date: document.getElementById('departureDate').value,
+                max_price: parseInt(document.getElementById('maxPrice').value),
+                direct_only: document.getElementById('directOnly').checked
+            };
+            
+            try {
+                const response = await fetch('/api/search/inspiration', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params)
+                });
+                
+                const data = await response.json();
+                hideLoading();
+                
+                if (data.success && data.destinations.length > 0) {
+                    showInspirationResults(data.destinations);
+                } else {
+                    showError('Nessuna destinazione economica trovata. Prova ad aumentare il budget.');
+                }
+            } catch (err) {
+                hideLoading();
+                showError('Errore durante la ricerca. Verifica le credenziali API.');
+                console.error(err);
+            }
+        });
+        
+        function showInspirationResults(destinations) {
+            destinationsList.innerHTML = destinations.map(d => `
+                <div class="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition cursor-pointer"
+                     onclick="searchDestination('${d.destination}')">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="text-lg font-bold text-gray-800">${d.destination}</h3>
+                        <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full font-semibold">
+                            €${d.price}
+                        </span>
+                    </div>
+                    <p class="text-sm text-gray-600">
+                        <i class="fas fa-calendar-alt mr-1"></i>
+                        ${formatDisplayDate(d.departure_date)} → ${formatDisplayDate(d.return_date)}
+                    </p>
+                    <p class="text-xs text-blue-600 mt-2">
+                        <i class="fas fa-search mr-1"></i> Clicca per vedere i voli
+                    </p>
+                </div>
+            `).join('');
+            
+            inspirationResults.classList.remove('hidden');
+            results.classList.add('hidden');
+        }
+        
+        function searchDestination(code) {
+            selectedDestinationCode = code;
+            destinationInput.value = code;
+            searchFlights();
+        }
+        
+        function showResults() {
+            renderFlights();
+            resultsCount.textContent = `(${currentFlights.length} voli trovati)`;
+            results.classList.remove('hidden');
+            inspirationResults.classList.add('hidden');
+        }
+        
+        function renderFlights() {
+            flightsList.innerHTML = currentFlights.map(flight => `
+                <div class="flight-card bg-white rounded-lg shadow-md p-5">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <!-- Flight Info -->
+                        <div class="flex-1">
+                            <!-- Outbound -->
+                            <div class="flex items-center gap-4 mb-3">
+                                <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">ANDATA</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-lg">${flight.outbound?.departure_airport || '-'}</span>
+                                    <i class="fas fa-long-arrow-alt-right text-gray-400"></i>
+                                    <span class="font-bold text-lg">${flight.outbound?.arrival_airport || '-'}</span>
+                                </div>
+                                <span class="text-gray-600">
+                                    ${formatFlightTime(flight.outbound?.departure_time)}
+                                </span>
+                                ${flight.outbound?.stops === 0 ? 
+                                    '<span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Diretto</span>' : 
+                                    `<span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">${flight.outbound?.stops} scalo</span>`
+                                }
+                            </div>
+                            
+                            <!-- Inbound -->
+                            ${flight.inbound ? `
+                                <div class="flex items-center gap-4">
+                                    <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">RITORNO</span>
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-bold text-lg">${flight.inbound.departure_airport}</span>
+                                        <i class="fas fa-long-arrow-alt-right text-gray-400"></i>
+                                        <span class="font-bold text-lg">${flight.inbound.arrival_airport}</span>
+                                    </div>
+                                    <span class="text-gray-600">
+                                        ${formatFlightTime(flight.inbound.departure_time)}
+                                    </span>
+                                    ${flight.inbound.stops === 0 ? 
+                                        '<span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Diretto</span>' : 
+                                        `<span class="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">${flight.inbound.stops} scalo</span>`
+                                    }
+                                </div>
+                            ` : ''}
+                            
+                            <!-- Airlines -->
+                            <div class="mt-3 text-sm text-gray-500">
+                                <i class="fas fa-plane text-gray-400 mr-1"></i>
+                                ${flight.airlines?.join(', ') || 'N/A'}
+                            </div>
+                        </div>
+                        
+                        <!-- Price -->
+                        <div class="text-right">
+                            <div class="text-3xl font-bold text-green-600">
+                                €${flight.total_price}
+                            </div>
+                            <div class="text-sm text-gray-500">
+                                ${flight.inbound ? 'andata e ritorno' : 'solo andata'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function formatFlightTime(isoString) {
+            if (!isoString) return '-';
+            const date = new Date(isoString);
+            const day = date.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' });
+            const time = date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            return `${day} ${time}`;
+        }
+        
+        function formatDisplayDate(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
+        }
+        
+        // Sorting
+        document.getElementById('sortPrice').addEventListener('click', sortByPrice);
+        document.getElementById('sortTime').addEventListener('click', sortByTime);
+        
+        function sortByPrice() {
+            currentFlights.sort((a, b) => parseFloat(a.total_price) - parseFloat(b.total_price));
+            renderFlights();
+        }
+        
+        function sortByTime() {
+            currentFlights.sort((a, b) => {
+                const timeA = a.outbound?.departure_time || '';
+                const timeB = b.outbound?.departure_time || '';
+                return timeA.localeCompare(timeB);
+            });
+            renderFlights();
+        }
+        
+        // UI Helpers
+        function showLoading() {
+            loading.classList.remove('hidden');
+        }
+        
+        function hideLoading() {
+            loading.classList.add('hidden');
+        }
+        
+        function showError(msg) {
+            errorMessage.textContent = msg;
+            error.classList.remove('hidden');
+        }
+        
+        function hideError() {
+            error.classList.add('hidden');
+        }
+        
+        function hideResults() {
+            results.classList.add('hidden');
+            inspirationResults.classList.add('hidden');
+        }
+        
+        // Initialize
+        setDefaultDates();
+    </script>
+</body>
+</html>
