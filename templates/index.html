@@ -217,6 +217,7 @@
 <script>
 const CURRENCY = "{{ currency }}";
 const SETS = {{ destination_sets | tojson }};
+const REQ_PER_SEC = {{ req_per_sec }};
 let lastFlights = [];
 
 // ------------------------------------------------------------------ //
@@ -288,16 +289,17 @@ function updateScanNote() {
   const set = SETS.find(s => s.key === key);
   if (!set) { $("scanNote").textContent = ""; return; }
 
-  // Ogni coppia partenza/meta e' una richiesta; con 4 in parallelo vengono
-  // circa 0,08 s l'una. Meglio dirlo prima che far aspettare al buio.
+  // Ogni coppia partenza/meta e' una richiesta. Il ritmo non lo decide il
+  // parallelismo ma il limitatore lato server (REQ_PER_SEC), messo li' perche'
+  // andare piu' veloce fa scattare il 429 di Google.
   const origins = Math.max(1, selectedOrigins().length);
   const searches = set.real ? set.count : set.count * origins;
-  const seconds = Math.max(2, Math.round(searches * 0.08));
+  const seconds = Math.max(2, Math.round(searches / REQ_PER_SEC));
   const note = $("scanNote");
   note.textContent = set.real
     ? `${set.count} destinazioni realmente servite dai tuoi aeroporti · circa ${seconds} s`
     : `${set.count} mete × ${origins} partenza/e = ${searches} ricerche · circa ${seconds} s`;
-  note.className = "text-xs mt-2 " + (seconds > 12 ? "text-amber-700" : "text-slate-500");
+  note.className = "text-xs mt-2 " + (seconds > 15 ? "text-amber-700" : "text-slate-500");
 }
 $("destinationSet").addEventListener("change", updateScanNote);
 document.querySelectorAll(".origin").forEach(el => el.addEventListener("change", updateScanNote));

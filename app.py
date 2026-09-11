@@ -19,6 +19,7 @@ from flightcore import airports, consent
 from flightcore.cache import search_cache
 from flightcore.engine import Engine
 from flightcore.models import SearchQuery
+from flightcore.ratelimit import limiter
 
 load_dotenv()
 
@@ -55,6 +56,9 @@ def index():
         destination_sets=airports.destination_sets_info(),
         default_set=airports.DEFAULT_DESTINATION_SET,
         currency=CURRENCY,
+        # La pagina stima la durata di una scansione: deve usare il ritmo vero
+        # del limitatore, non un numero scritto a mano che invecchia da solo.
+        req_per_sec=limiter.rate,
     )
 
 
