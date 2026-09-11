@@ -30,3 +30,7 @@ Thumbs.db
 
 # Local config
 config.local.py
+
+# Cookie di consenso Google e altri file temporanei
+.cache/
+.pytest_cache/

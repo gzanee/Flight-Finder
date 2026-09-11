@@ -1,424 +1,346 @@
 """
-Flight Finder - Trova voli economici da VCE/TSF
-Utilizza le API Amadeus Self-Service
+Flight Finder - voli economici da Venezia (VCE) e Treviso (TSF).
+
+I dati arrivano da Google Flights tramite due librerie non ufficiali usate in
+cascata (vedi flightcore/engine.py). Nessuna chiave API, nessuna registrazione.
 """
 
+from __future__ import annotations
+
+import logging
 import os
-from datetime import datetime, timedelta
-from flask import Flask, render_template, request, jsonify
-from amadeus import Client, ResponseError
+import re
+from datetime import date, datetime, timedelta
+
 from dotenv import load_dotenv
+from flask import Flask, jsonify, render_template, request
+
+from flightcore import airports, consent
+from flightcore.cache import search_cache
+from flightcore.engine import Engine
+from flightcore.models import SearchQuery
 
 load_dotenv()
 
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger("flight-finder")
+
 app = Flask(__name__)
 
-# Configurazione Amadeus
-amadeus = Client(
-    client_id=os.getenv('AMADEUS_CLIENT_ID'),
-    client_secret=os.getenv('AMADEUS_CLIENT_SECRET'),
-    hostname='test'  # Cambia in 'production' per dati reali
-)
+COUNTRY = os.getenv("GOOGLE_COUNTRY", "IT")
+LANGUAGE = os.getenv("GOOGLE_LANGUAGE", "it")
+CURRENCY = os.getenv("CURRENCY", "EUR")
 
-# Aeroporti di partenza supportati
-AIRPORTS = {
-    'VCE': 'Venezia Marco Polo',
-    'TSF': 'Treviso Antonio Canova'
-}
+# Il consenso cookie va ottenuto prima della prima richiesta: da un IP europeo
+# senza di esso Google risponde con la pagina di consenso e ogni ricerca torna
+# vuota senza errori. La cache su disco evita di rifarlo a ogni avvio.
+consent.install(country=COUNTRY, currency=CURRENCY)
+
+engine = Engine(country=COUNTRY, language=LANGUAGE)
 
 
-@app.route('/')
+# ---------------------------------------------------------------------- #
+# Pagine
+# ---------------------------------------------------------------------- #
+
+
+@app.route("/")
 def index():
-    """Pagina principale con form di ricerca"""
-    return render_template('index.html', airports=AIRPORTS)
+    return render_template(
+        "index.html",
+        airports=airports.HOME_AIRPORTS,
+        destination_sets=airports.destination_sets_info(),
+        default_set=airports.DEFAULT_DESTINATION_SET,
+        currency=CURRENCY,
+    )
 
 
-@app.route('/api/search/inspiration', methods=['POST'])
-def search_inspiration():
-    """
-    Cerca destinazioni economiche da un aeroporto
-    Usa Flight Inspiration Search per trovare "ovunque" economico
-    """
-    data = request.json
-    origin = data.get('origin', 'VCE')
-    departure_date = data.get('departure_date')
-    max_price = data.get('max_price', 100)
-    
-    try:
-        # Flight Inspiration Search - trova destinazioni economiche
-        response = amadeus.shopping.flight_destinations.get(
-            origin=origin,
-            departureDate=departure_date,
-            maxPrice=max_price,
-            nonStop='true' if data.get('direct_only', True) else 'false'
-        )
-        
-        destinations = []
-        for dest in response.data:
-            destinations.append({
-                'destination': dest.get('destination'),
-                'departure_date': dest.get('departureDate'),
-                'return_date': dest.get('returnDate'),
-                'price': dest.get('price', {}).get('total'),
-                'currency': dest.get('price', {}).get('currency', 'EUR')
-            })
-        
-        return jsonify({
-            'success': True,
-            'count': len(destinations),
-            'destinations': destinations
-        })
-        
-    except ResponseError as error:
-        return jsonify({
-            'success': False,
-            'error': str(error)
-        }), 400
+# ---------------------------------------------------------------------- #
+# API
+# ---------------------------------------------------------------------- #
 
 
-@app.route('/api/search/flights', methods=['POST'])
-def search_flights():
+class BadRequest(Exception):
+    pass
+
+
+@app.errorhandler(BadRequest)
+def _bad_request(exc: BadRequest):
+    return jsonify({"success": False, "error": str(exc)}), 400
+
+
+@app.route("/api/search", methods=["POST"])
+def api_search():
     """
-    Cerca voli specifici con tutti i filtri
-    Usa Flight Offers Search per ricerca dettagliata
+    Ricerca voli su una rotta, eventualmente da piu' aeroporti di partenza.
+
+    Con destination assente o "anywhere" la richiesta viene dirottata su
+    /api/explore, che scandisce una rosa di destinazioni.
     """
-    data = request.json
-    
-    origin = data.get('origin', 'VCE')
-    destination = data.get('destination')  # Può essere None per "ovunque"
-    departure_date = data.get('departure_date')
-    return_date = data.get('return_date')
-    max_price = int(data.get('max_price', 100))
-    direct_only = data.get('direct_only', True)
-    departure_time_min = data.get('departure_time_min', '00:00')
-    return_time_min = data.get('return_time_min', '00:00')
-    adults = data.get('adults', 1)
-    
-    try:
-        # Se destinazione non specificata, prima trova destinazioni economiche
-        if not destination or destination == 'anywhere':
-            return search_anywhere(
-                origin, departure_date, return_date, max_price, 
-                direct_only, departure_time_min, return_time_min, adults
-            )
-        
-        # Ricerca voli specifici
-        search_params = {
-            'originLocationCode': origin,
-            'destinationLocationCode': destination,
-            'departureDate': departure_date,
-            'adults': adults,
-            'currencyCode': 'EUR',
-            'max': 50
+    data = request.get_json(silent=True) or {}
+    origins = _origins(data)
+    destination = (data.get("destination") or "").strip().upper()
+
+    if not destination or destination == "ANYWHERE":
+        return api_explore()
+
+    if not airports.exists(destination):
+        raise BadRequest(f"Destinazione sconosciuta: {destination}")
+
+    query = _build_query(data, origin=origins[0], destination=destination)
+    offers, providers = engine.search_many_origins(origins, query)
+
+    return jsonify(
+        {
+            "success": True,
+            "mode": "route",
+            "notice": engine.diagnosis() if not offers else None,
+            "count": len(offers),
+            "origins": origins,
+            "destination": destination,
+            "destination_name": airports.name(destination),
+            "providers": providers,
+            "flights": [o.to_dict() for o in offers],
         }
-        
-        if return_date:
-            search_params['returnDate'] = return_date
-        
-        if direct_only:
-            search_params['nonStop'] = 'true'
-        
-        response = amadeus.shopping.flight_offers_search.get(**search_params)
-        
-        # Filtra e formatta i risultati
-        flights = filter_and_format_flights(
-            response.data, 
-            max_price, 
-            departure_time_min, 
-            return_time_min
-        )
-        
-        return jsonify({
-            'success': True,
-            'count': len(flights),
-            'flights': flights
-        })
-        
-    except ResponseError as error:
-        return jsonify({
-            'success': False,
-            'error': str(error)
-        }), 400
+    )
 
 
-def search_anywhere(origin, departure_date, return_date, max_price, 
-                    direct_only, departure_time_min, return_time_min, adults):
-    """
-    Cerca voli verso "ovunque" - prima trova destinazioni, poi cerca voli
-    """
-    all_flights = []
-    errors = []
-    
-    try:
-        # Step 1: Trova destinazioni economiche
-        inspiration_response = amadeus.shopping.flight_destinations.get(
-            origin=origin,
-            departureDate=departure_date,
-            maxPrice=max_price,
-            nonStop='true' if direct_only else 'false'
-        )
-        
-        destinations = [d.get('destination') for d in inspiration_response.data[:10]]  # Top 10
-        
-        # Step 2: Per ogni destinazione, cerca voli dettagliati
-        for dest in destinations:
-            try:
-                search_params = {
-                    'originLocationCode': origin,
-                    'destinationLocationCode': dest,
-                    'departureDate': departure_date,
-                    'adults': adults,
-                    'currencyCode': 'EUR',
-                    'max': 10
-                }
-                
-                if return_date:
-                    search_params['returnDate'] = return_date
-                
-                if direct_only:
-                    search_params['nonStop'] = 'true'
-                
-                response = amadeus.shopping.flight_offers_search.get(**search_params)
-                
-                flights = filter_and_format_flights(
-                    response.data,
-                    max_price,
-                    departure_time_min,
-                    return_time_min
-                )
-                
-                all_flights.extend(flights)
-                
-            except ResponseError as e:
-                errors.append(f"{dest}: {str(e)}")
-                continue
-        
-        # Ordina per prezzo
-        all_flights.sort(key=lambda x: float(x.get('total_price', 9999)))
-        
-        return jsonify({
-            'success': True,
-            'count': len(all_flights),
-            'flights': all_flights,
-            'searched_destinations': destinations,
-            'errors': errors if errors else None
-        })
-        
-    except ResponseError as error:
-        return jsonify({
-            'success': False,
-            'error': str(error)
-        }), 400
+@app.route("/api/explore", methods=["POST"])
+def api_explore():
+    """Ricerca "ovunque": migliore offerta per ciascuna destinazione della rosa."""
+    data = request.get_json(silent=True) or {}
+    origins = _origins(data)
 
+    by_origin = airports.resolve_destinations(
+        origins,
+        set_key=data.get("destination_set"),
+        explicit=_destination_list(data.get("destinations")),
+    )
 
-def filter_and_format_flights(flight_offers, max_price, departure_time_min, return_time_min):
-    """
-    Filtra i voli per prezzo e orario, e formatta i risultati
-    """
-    filtered_flights = []
-    
-    for offer in flight_offers:
-        price = float(offer.get('price', {}).get('total', 9999))
-        
-        # Filtro prezzo
-        if price > max_price:
-            continue
-        
-        itineraries = offer.get('itineraries', [])
-        if not itineraries:
-            continue
-        
-        # Controlla orario partenza andata
-        outbound = itineraries[0]
-        outbound_segments = outbound.get('segments', [])
-        if outbound_segments:
-            departure_time = outbound_segments[0].get('departure', {}).get('at', '')
-            if departure_time:
-                dep_time = datetime.fromisoformat(departure_time.replace('Z', '+00:00'))
-                min_time = datetime.strptime(departure_time_min, '%H:%M').time()
-                if dep_time.time() < min_time:
-                    continue
-        
-        # Controlla orario partenza ritorno (se presente)
-        if len(itineraries) > 1 and return_time_min:
-            inbound = itineraries[1]
-            inbound_segments = inbound.get('segments', [])
-            if inbound_segments:
-                return_time = inbound_segments[0].get('departure', {}).get('at', '')
-                if return_time:
-                    ret_time = datetime.fromisoformat(return_time.replace('Z', '+00:00'))
-                    min_ret_time = datetime.strptime(return_time_min, '%H:%M').time()
-                    if ret_time.time() < min_ret_time:
-                        continue
-        
-        # Formatta il volo
-        formatted = format_flight_offer(offer)
-        if formatted:
-            filtered_flights.append(formatted)
-    
-    return filtered_flights
+    # Il tetto vale per aeroporto di partenza: e' quello che governa la durata
+    # della scansione, visto che ogni coppia origine/meta e' una richiesta.
+    limit = _int(data.get("max_destinations"), default=150, low=1, high=200)
+    by_origin = {origin: codes[:limit] for origin, codes in by_origin.items()}
 
+    prima = next((c for codes in by_origin.values() for c in codes), None)
+    if prima is None:
+        raise BadRequest("Nessuna destinazione da esaminare con questi criteri")
 
-def format_flight_offer(offer):
-    """
-    Formatta un'offerta volo in un formato leggibile
-    """
-    try:
-        itineraries = offer.get('itineraries', [])
-        price_info = offer.get('price', {})
-        
-        result = {
-            'id': offer.get('id'),
-            'total_price': price_info.get('total'),
-            'currency': price_info.get('currency', 'EUR'),
-            'outbound': None,
-            'inbound': None,
-            'airlines': set(),
-            'booking_class': offer.get('travelerPricings', [{}])[0].get('fareDetailsBySegment', [{}])[0].get('cabin', 'ECONOMY')
+    query = _build_query(data, origin=origins[0], destination=prima)
+    offers, providers = engine.explore(by_origin, query)
+
+    esaminate = sorted({c for codes in by_origin.values() for c in codes})
+    return jsonify(
+        {
+            "success": True,
+            "mode": "explore",
+            "notice": engine.diagnosis() if not offers else None,
+            "count": len(offers),
+            "origins": origins,
+            "searched_destinations": esaminate,
+            "destinations_by_origin": by_origin,
+            "searches": sum(len(c) for c in by_origin.values()),
+            "providers": providers,
+            "flights": [
+                {**o.to_dict(), "destination_name": airports.name(o.destination)} for o in offers
+            ],
         }
-        
-        # Andata
-        if itineraries:
-            outbound = itineraries[0]
-            segments = outbound.get('segments', [])
-            if segments:
-                first_seg = segments[0]
-                last_seg = segments[-1]
-                
-                result['outbound'] = {
-                    'departure_airport': first_seg.get('departure', {}).get('iataCode'),
-                    'departure_time': first_seg.get('departure', {}).get('at'),
-                    'arrival_airport': last_seg.get('arrival', {}).get('iataCode'),
-                    'arrival_time': last_seg.get('arrival', {}).get('at'),
-                    'duration': outbound.get('duration'),
-                    'stops': len(segments) - 1,
-                    'carriers': [s.get('carrierCode') for s in segments]
-                }
-                
-                for seg in segments:
-                    result['airlines'].add(seg.get('carrierCode'))
-        
-        # Ritorno
-        if len(itineraries) > 1:
-            inbound = itineraries[1]
-            segments = inbound.get('segments', [])
-            if segments:
-                first_seg = segments[0]
-                last_seg = segments[-1]
-                
-                result['inbound'] = {
-                    'departure_airport': first_seg.get('departure', {}).get('iataCode'),
-                    'departure_time': first_seg.get('departure', {}).get('at'),
-                    'arrival_airport': last_seg.get('arrival', {}).get('iataCode'),
-                    'arrival_time': last_seg.get('arrival', {}).get('at'),
-                    'duration': inbound.get('duration'),
-                    'stops': len(segments) - 1,
-                    'carriers': [s.get('carrierCode') for s in segments]
-                }
-                
-                for seg in segments:
-                    result['airlines'].add(seg.get('carrierCode'))
-        
-        result['airlines'] = list(result['airlines'])
-        return result
-        
-    except Exception as e:
-        print(f"Errore formattazione volo: {e}")
+    )
+
+
+@app.route("/api/cheapest-dates", methods=["POST"])
+def api_cheapest_dates():
+    """Calendario prezzi: quanto costa la stessa rotta giorno per giorno."""
+    data = request.get_json(silent=True) or {}
+    origin = (data.get("origin") or "VCE").upper()
+    destination = (data.get("destination") or "").upper()
+
+    if not airports.exists(origin):
+        raise BadRequest(f"Aeroporto di partenza sconosciuto: {origin}")
+    if not destination or not airports.exists(destination):
+        raise BadRequest("Serve una destinazione per il calendario prezzi")
+
+    today = date.today()
+    from_date = _date(data.get("from_date"), default=today + timedelta(days=7))
+    to_date = _date(data.get("to_date"), default=today + timedelta(days=60))
+    if from_date > to_date:
+        raise BadRequest("La data iniziale e' successiva a quella finale")
+
+    dates, provider = engine.cheapest_dates(
+        origin,
+        destination,
+        from_date.isoformat(),
+        to_date.isoformat(),
+        trip_days=_int(data.get("trip_days"), default=None, low=1, high=30),
+        adults=_int(data.get("adults"), default=1, low=1, high=9),
+        max_stops=_max_stops(data),
+        currency=CURRENCY,
+    )
+
+    return jsonify(
+        {
+            "success": True,
+            "count": len(dates),
+            "origin": origin,
+            "destination": destination,
+            "provider": provider,
+            "cheapest": min((d.price for d in dates), default=None),
+            "dates": [d.to_dict() for d in dates],
+        }
+    )
+
+
+@app.route("/api/airports", methods=["GET"])
+def api_airports():
+    """Autocomplete aeroporti, servito da un catalogo locale di 7.800 voci."""
+    keyword = request.args.get("q") or request.args.get("keyword") or ""
+    return jsonify({"success": True, "airports": airports.search(keyword, limit=10)})
+
+
+@app.route("/api/health", methods=["GET"])
+def api_health():
+    """Stato dei provider: utile per capire se Google sta rifiutando le richieste."""
+    return jsonify(
+        {
+            "success": True,
+            "providers": engine.provider_names,
+            "breaker": engine.breaker.status(),
+            "consent_cookies": sorted(consent.get_cookies(country=COUNTRY, currency=CURRENCY)),
+            "country": COUNTRY,
+            "currency": CURRENCY,
+        }
+    )
+
+
+@app.route("/api/cache", methods=["DELETE"])
+def api_clear_cache():
+    search_cache.clear()
+    engine.breaker.reset()
+    return jsonify({"success": True, "message": "Cache e circuit breaker azzerati"})
+
+
+# ---------------------------------------------------------------------- #
+# Parsing della richiesta
+# ---------------------------------------------------------------------- #
+
+
+def _origins(data: dict) -> list[str]:
+    raw = data.get("origins") or data.get("origin") or "VCE"
+    codes = [raw] if isinstance(raw, str) else list(raw)
+    origins: list[str] = []
+    for raw_code in codes:
+        code = str(raw_code).strip().upper()
+        if not airports.exists(code):
+            raise BadRequest(f"Aeroporto di partenza sconosciuto: {code}")
+        if code not in origins:
+            origins.append(code)
+    if not origins:
+        raise BadRequest("Serve almeno un aeroporto di partenza")
+    return origins
+
+
+def _destination_list(raw) -> list[str] | None:
+    """Accetta una lista JSON oppure una stringa tipo "BCN, LIS ATH"."""
+    if not raw:
         return None
+    codes = re.split(r"[\s,;]+", raw) if isinstance(raw, str) else [str(x) for x in raw]
+    validi, ignorati = [], []
+    for raw_code in codes:
+        code = raw_code.strip().upper()
+        if not code:
+            continue
+        (validi if airports.exists(code) else ignorati).append(code)
+    if ignorati and not validi:
+        raise BadRequest(f"Nessun codice valido fra: {', '.join(ignorati)}")
+    return validi or None
 
 
-@app.route('/api/cheapest-dates', methods=['POST'])
-def cheapest_dates():
-    """
-    Trova le date più economiche per una rotta
-    Usa Flight Cheapest Date Search
-    """
-    data = request.json
-    origin = data.get('origin', 'VCE')
-    destination = data.get('destination')
-    
-    if not destination:
-        return jsonify({
-            'success': False,
-            'error': 'Destinazione richiesta per questa ricerca'
-        }), 400
-    
+def _build_query(data: dict, origin: str, destination: str) -> SearchQuery:
+    departure_date = _date(data.get("departure_date"), default=date.today() + timedelta(days=14))
+    return_date = _date(data.get("return_date"), default=None)
+
+    if departure_date < date.today():
+        raise BadRequest("La data di andata e' nel passato")
+    if return_date and return_date < departure_date:
+        raise BadRequest("Il ritorno e' precedente all'andata")
+
+    return SearchQuery(
+        origin=origin,
+        destination=destination,
+        departure_date=departure_date.isoformat(),
+        return_date=return_date.isoformat() if return_date else None,
+        adults=_int(data.get("adults"), default=1, low=1, high=9),
+        children=_int(data.get("children"), default=0, low=0, high=8),
+        infants=_int(data.get("infants"), default=0, low=0, high=8),
+        seat=data.get("seat") if data.get("seat") in
+        ("economy", "premium-economy", "business", "first") else "economy",
+        max_stops=_max_stops(data),
+        max_price=_int(data.get("max_price"), default=None, low=1, high=100000),
+        currency=CURRENCY,
+        earliest_departure=_hour(data.get("departure_time_min")),
+        latest_departure=_hour(data.get("departure_time_max")),
+        earliest_arrival=_hour(data.get("arrival_time_min")),
+        latest_arrival=_hour(data.get("arrival_time_max")),
+        return_earliest_departure=_hour(data.get("return_time_min")),
+        return_latest_departure=_hour(data.get("return_time_max")),
+        airlines=[a.upper() for a in (data.get("airlines") or []) if a],
+        exclude_basic_economy=bool(data.get("exclude_basic_economy")),
+        sort_by=data.get("sort_by") if data.get("sort_by") in
+        ("cheapest", "best", "duration", "departure", "emissions") else "cheapest",
+    )
+
+
+def _max_stops(data: dict) -> int | None:
+    if data.get("direct_only"):
+        return 0
+    return _int(data.get("max_stops"), default=None, low=0, high=3)
+
+
+def _int(value, default, low=None, high=None):
+    if value in (None, ""):
+        return default
     try:
-        response = amadeus.shopping.flight_dates.get(
-            origin=origin,
-            destination=destination
-        )
-        
-        dates = []
-        for item in response.data:
-            dates.append({
-                'departure_date': item.get('departureDate'),
-                'return_date': item.get('returnDate'),
-                'price': item.get('price', {}).get('total'),
-                'currency': item.get('price', {}).get('currency', 'EUR')
-            })
-        
-        return jsonify({
-            'success': True,
-            'count': len(dates),
-            'dates': dates
-        })
-        
-    except ResponseError as error:
-        return jsonify({
-            'success': False,
-            'error': str(error)
-        }), 400
+        number = int(value)
+    except (TypeError, ValueError):
+        raise BadRequest(f"Valore numerico non valido: {value!r}") from None
+    if low is not None and number < low:
+        raise BadRequest(f"Valore troppo basso: {number} (minimo {low})")
+    if high is not None and number > high:
+        raise BadRequest(f"Valore troppo alto: {number} (massimo {high})")
+    return number
 
 
-@app.route('/api/airports/search', methods=['GET'])
-def search_airports():
-    """
-    Cerca aeroporti per nome o codice
-    """
-    keyword = request.args.get('keyword', '')
-    
-    if len(keyword) < 2:
-        return jsonify({
-            'success': True,
-            'airports': []
-        })
-    
+def _hour(value) -> int | None:
+    """Accetta "18:00" oppure 18: Google filtra per ora intera, non per minuto."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, int):
+        hour = value
+    else:
+        text = str(value).strip()
+        hour = int(text.split(":")[0]) if ":" in text else int(text)
+    if not 0 <= hour <= 23:
+        raise BadRequest(f"Ora fuori intervallo: {value!r}")
+    return hour
+
+
+def _date(value, default):
+    if value in (None, ""):
+        return default
     try:
-        response = amadeus.reference_data.locations.get(
-            keyword=keyword,
-            subType='AIRPORT'
-        )
-        
-        airports = []
-        for loc in response.data[:10]:
-            airports.append({
-                'code': loc.get('iataCode'),
-                'name': loc.get('name'),
-                'city': loc.get('address', {}).get('cityName'),
-                'country': loc.get('address', {}).get('countryName')
-            })
-        
-        return jsonify({
-            'success': True,
-            'airports': airports
-        })
-        
-    except ResponseError as error:
-        return jsonify({
-            'success': False,
-            'error': str(error)
-        }), 400
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+    except ValueError:
+        raise BadRequest(f"Data non valida: {value!r} (formato atteso AAAA-MM-GG)") from None
 
 
-if __name__ == '__main__':
-    # Verifica configurazione
-    if not os.getenv('AMADEUS_CLIENT_ID') or not os.getenv('AMADEUS_CLIENT_SECRET'):
-        print("=" * 60)
-        print("ATTENZIONE: Configura le credenziali Amadeus!")
-        print("1. Registrati su https://developers.amadeus.com")
-        print("2. Crea un'app e ottieni Client ID e Secret")
-        print("3. Copia .env.example in .env e inserisci le credenziali")
-        print("=" * 60)
-    
-    app.run(debug=True, port=5000)
+if __name__ == "__main__":
+    print("=" * 64)
+    print("Flight Finder - dati da Google Flights, nessuna chiave API richiesta")
+    print(f"Provider attivi : {', '.join(engine.provider_names)}")
+    print(f"Paese / valuta  : {COUNTRY} / {CURRENCY}")
+    print("Apri            : http://localhost:5001")
+    print("=" * 64)
+    app.run(debug=os.getenv("FLASK_DEBUG", "1") == "1", port=int(os.getenv("PORT", "5001")))
