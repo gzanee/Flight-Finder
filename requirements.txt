@@ -1,4 +1,20 @@
-flask==3.0.0
-amadeus==9.0.0
-python-dotenv==1.0.0
-requests==2.31.0
+# Versioni effettivamente verificate su Python 3.12.
+
+# Web
+flask==3.1.3
+python-dotenv==1.2.3
+
+# Provider Google Flights (non ufficiali, nessuna chiave API richiesta).
+# fli e' il primario: parla con l'endpoint interno di Google e restituisce
+# l'elenco completo dei voli. fast-flights e' la riserva: legge l'HTML, da'
+# meno risultati ma risponde quando l'endpoint interno rifiuta le richieste.
+flights==0.9.0          # su PyPI il pacchetto "flights" e' punitarani/fli
+fast-flights==3.1.0
+
+# Usata da flightcore/consent.py per il consenso cookie. Arriva gia' come
+# dipendenza di fast-flights, ma la importiamo direttamente.
+primp==2.0.0
+
+# Test e lint
+pytest==9.1.1
+ruff==0.16.7
