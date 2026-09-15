@@ -165,7 +165,7 @@ def test_rose_di_destinazioni_contengono_solo_codici_validi():
 # ------------------------------------------------------------------- API ---
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def client():
     from app import app
 

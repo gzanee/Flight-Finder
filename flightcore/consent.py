@@ -176,13 +176,11 @@ def _install_into_fli(cookies: dict[str, str], reset_sessions: bool) -> None:
 
 
 def _install_into_primp(cookies: dict[str, str]) -> None:
-    """fast-flights usa primp.Client, che e' un tipo Rust: si avvolge con una factory."""
+    """Attach consent only to the Google fetcher, never to unrelated HTTP clients."""
     try:
         import primp
+        from fast_flights import fetcher
     except ImportError:
-        return
-
-    if getattr(primp.Client, "_flight_finder_patched", False):
         return
 
     original = primp.Client
@@ -191,16 +189,7 @@ def _install_into_primp(cookies: dict[str, str]) -> None:
         merged = dict(cookies)
         merged.update(kwargs.get("cookies") or {})
         kwargs["cookies"] = merged
+        kwargs.setdefault("timeout", 25)
         return original(*args, **kwargs)
 
-    factory._flight_finder_patched = True  # type: ignore[attr-defined]
-    factory._original = original  # type: ignore[attr-defined]
-    primp.Client = factory  # type: ignore[assignment]
-
-    # fast_flights fa `from primp import Client`: se il modulo e' gia' stato
-    # importato tiene un riferimento al tipo originale e va aggiornato a mano.
-    import sys
-
-    fetcher = sys.modules.get("fast_flights.fetcher")
-    if fetcher is not None:
-        fetcher.Client = factory
+    fetcher.Client = factory

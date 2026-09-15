@@ -1,8 +1,8 @@
 """
 Flight Finder - voli economici da Venezia (VCE) e Treviso (TSF).
 
-I dati arrivano da Google Flights tramite due librerie non ufficiali usate in
-cascata (vedi flightcore/engine.py). Nessuna chiave API, nessuna registrazione.
+Weekend Finder combina due quotazioni Google con ritorno verificato nei dati
+di shopping. La pagina classic conserva il motore precedente a due provider.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from flask import Flask, jsonify, render_template, request
 from flightcore import airports, consent
 from flightcore.cache import search_cache
 from flightcore.engine import Engine
+from flightcore.flexible_api import blueprint as flexible_blueprint
 from flightcore.models import SearchQuery
 from flightcore.ratelimit import limiter
 
@@ -30,6 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger("flight-finder")
 
 app = Flask(__name__)
+app.register_blueprint(flexible_blueprint)
 
 COUNTRY = os.getenv("GOOGLE_COUNTRY", "IT")
 LANGUAGE = os.getenv("GOOGLE_LANGUAGE", "it")
@@ -48,7 +50,7 @@ engine = Engine(country=COUNTRY, language=LANGUAGE)
 # ---------------------------------------------------------------------- #
 
 
-@app.route("/")
+@app.route("/classic")
 def index():
     return render_template(
         "index.html",

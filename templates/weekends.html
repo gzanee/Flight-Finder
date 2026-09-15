@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flight Finder · Weekend Finder</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='weekends.css') }}">
+<script src="{{ url_for('static', filename='weekends.js') }}" defer></script>
+</head>
+<body>
+<header><a class="brand" href="/">↗ Flight Finder</a><a href="/classic">Ricerca classica →</a></header>
+<main>
+<section class="intro"><p class="eyebrow">PIÙ TEMPO PER PARTIRE</p><h1>Il prossimo weekend,<br>al prezzo giusto.</h1><p>Scegli quando puoi partire. Cerchiamo andata e ritorno insieme, con orari precisi e prezzi controllati.</p></section>
+<div class="layout">
+<section class="panel search-panel">
+<div class="tabs" role="group" aria-label="Modalità ricerca"><button type="button" id="weekend-mode" class="selected" aria-pressed="true">Weekend Finder</button><button type="button" id="flexible-mode" aria-pressed="false">Flexible Trip Finder</button></div>
+<form id="trip-form">
+<fieldset><legend>Da dove parti?</legend><div class="choices origins">
+<label><input type="checkbox" name="origin" value="VCE" checked>Venezia <b>VCE</b></label>
+<label><input type="checkbox" name="origin" value="TSF" checked>Treviso <b>TSF</b></label>
+<label><input type="checkbox" name="origin" value="VRN">Verona <b>VRN</b></label>
+<label><input type="checkbox" name="origin" value="BLQ">Bologna <b>BLQ</b></label>
+<label><input type="checkbox" name="origin" value="BGY">Bergamo <b>BGY</b></label>
+</div></fieldset>
+<label class="field">Destinazione<select id="destination-mode"><option value="anywhere">Ovunque · destinazioni candidate degli aeroporti scelti</option><option value="custom">Scegli aeroporti specifici</option></select></label>
+<label class="field" id="custom-field" hidden>Codici aeroporti<input id="destinations" placeholder="BCN, LIS, TLS" autocomplete="off"><small>Codici IATA separati da virgole. Vuoto nella modalità Ovunque.</small></label>
+<div class="grid2"><label class="field">Dal<input id="start-date" type="date" required></label><label class="field">Al<input id="end-date" type="date" required></label></div>
+<p class="hint">Sia l’andata sia il ritorno devono rientrare nel periodo.</p>
+<div class="journey">
+<fieldset><legend><span class="badge">↗</span> Andata</legend><div id="departure-days" class="days"></div><div class="grid2"><label class="field">Partenza dalle<input id="departure-min" type="time" value="18:00" required></label><label class="field">Fino alle<input id="departure-max" type="time" value="23:59" required></label></div></fieldset>
+<fieldset><legend><span class="badge">↙</span> Ritorno</legend><div id="return-days" class="days"></div><div class="grid2"><label class="field">Partenza dalle<input id="return-min" type="time" value="18:00" required></label><label class="field">Fino alle<input id="return-max" type="time" value="23:59" required></label></div></fieldset>
+</div>
+<div class="grid2"><label class="field">Minimo notti<input id="min-nights" type="number" min="1" max="30" value="2" required></label><label class="field">Massimo notti<input id="max-nights" type="number" min="1" max="30" value="2" required></label></div>
+<p class="hint">Venerdì → domenica = 2 notti di calendario. Il tempo realmente trascorso a destinazione è mostrato a parte.</p>
+<div class="grid2"><label class="field">Budget totale A/R (€)<input id="budget" type="number" min="1" max="100000" value="100" step="0.01" required></label><label class="field">Scali per tratta<select id="max-stops"><option value="0">Solo diretti</option><option value="1">Massimo 1 scalo</option></select></label></div>
+<details><summary>Viaggiatori, bagagli e altri filtri</summary>
+<div class="grid2"><label class="field">Adulti<input id="adults" type="number" min="1" max="9" value="1" required></label><label class="field">Bambini (con posto)<input id="children" type="number" min="0" max="8" value="0" required></label></div>
+<label class="field">Aeroporto di rientro<select id="return-airport"><option value="same">Lo stesso da cui parto</option><option value="group">Qualsiasi degli aeroporti selezionati</option></select></label>
+<div class="grid2"><label class="field">Compagnie<select id="airline-mode"><option value="all">Tutte</option><option value="low_cost">Solo low-cost (elenco selezionato)</option></select></label><label class="field">Bagaglio nel confronto<select id="baggage"><option value="base">Tariffa base</option><option value="cabin">Trolley per viaggiatore</option><option value="checked">Bagaglio in stiva per viaggiatore</option></select></label></div>
+<p class="hint">Bagagli: usiamo il filtro prezzo di Google. Misure, peso e inclusioni vanno confermati sul sito di prenotazione.</p>
+<label class="check"><input id="self-transfer" type="checkbox">Includi coincidenze autogestite e protezione non dichiarata</label>
+<p class="hint">Il self-transfer riguarda gli scali durante una tratta. Andata e ritorno possono essere due biglietti separati anche con voli diretti.</p>
+<div class="grid2"><label class="field">Arrivo a casa entro le (facoltativo)<input id="final-arrival" type="time"><small>Nel giorno scelto per il ritorno: esclude l’arrivo il lunedì.</small></label><label class="field">Ore minime a destinazione<input id="min-hours" type="number" min="0" max="720" value="0" required></label></div>
+</details>
+<button class="primary wide" id="plan-button" type="submit">Trova le combinazioni di date →</button>
+</form>
+</section>
+<aside>
+<section class="panel" id="plan-panel"><p class="eyebrow">IL TUO VIAGGIO</p><h2>Venerdì sera.<br>Domenica sera.</h2><p>Due notti, da Venezia e Treviso, verso una destinazione da scoprire.</p><div class="rule"></div><h3>Prima i voli, poi il prezzo.</h3><p>Nei risultati entrano solo coppie con numero volo, aeroporti, date, orari e prezzo live per entrambe le tratte.</p><p class="hint">Una rotta presente in un catalogo non prova che il volo sia vendibile. La conferma finale spetta al venditore.</p></section>
+<section class="panel coverage"><h3>Cosa significa “Ovunque”?</h3><p>La ricerca parte dai cataloghi delle rotte degli aeroporti selezionati. Li usa come candidati e controlla i prezzi su Google: può non coprire rotte nuove o tutte le destinazioni raggiungibili con scalo.</p></section>
+</aside>
+</div>
+<div id="error" class="notice error" role="alert" hidden></div>
+<section id="progress-panel" class="panel" hidden aria-live="polite"><div class="progress-header"><h2 id="status-label">Ricerca in corso</h2><div><button id="cancel" type="button">Ferma</button><button id="resume" type="button" hidden>Riprendi</button></div></div><p id="job-summary" class="hint"></p><progress id="progress" max="100" value="0"></progress><p id="progress-text"></p><p id="current" class="hint"></p><p id="issues" class="notice" hidden></p><p class="hint">Controlli graduali, senza raffiche. Un limite di Google ferma la ricerca; il progresso rimane salvato sul computer.</p></section>
+<section id="results-panel" hidden><div class="results-heading"><div><p class="eyebrow">ANDATA + RITORNO</p><h2 id="results-heading">Weekend trovati</h2></div><label>Ordina per <select id="result-sort"><option value="price">Prezzo totale A/R</option><option value="useful">Tempo utile a destinazione</option></select></label></div><p id="result-note" class="hint"></p><p id="result-feedback" role="status"></p><div id="results"></div><div class="pagination"><button id="prev-page" type="button">← Precedenti</button><span id="page-label"></span><button id="next-page" type="button">Successivi →</button></div></section>
+</main>
+<footer>Flight Finder · Prezzi osservati su Google Flights, non prenotazioni confermate. Nessun acquisto viene eseguito dal portale.</footer>
+</body></html>
