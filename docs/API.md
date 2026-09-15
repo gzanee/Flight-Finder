@@ -1,11 +1,140 @@
 # API
 
 Tutti gli endpoint POST accettano e restituiscono JSON (`Content-Type: application/json`).
-Gli errori di validazione tornano `400` con `{"success": false, "error": "..."}`.
+Gli errori di validazione tornano `400` con un campo `error`.
 
 Base URL locale: `http://localhost:5001`
 
 ---
+
+## Weekend Finder e Flexible Trip Finder
+
+La pagina principale usa questi endpoint. Gli endpoint storici descritti più
+avanti appartengono a `/classic` e non garantiscono gli stessi controlli A/R.
+
+### POST `/api/flexible/plan` e POST `/api/flexible/jobs`
+
+Entrambi accettano lo stesso oggetto. `plan` valida e prepara la scansione senza
+interrogare Google Flights; per Ovunque può aggiornare i candidati da
+Wikipedia/Wikidata. `jobs` avvia la ricerca e risponde `202 {"id":"..."}`.
+
+```json
+{
+  "origins": ["VCE", "TSF"],
+  "start_date": "2026-10-01",
+  "end_date": "2026-12-31",
+  "departure_days": [4],
+  "return_days": [6],
+  "departure_min": "18:00",
+  "departure_max": "23:59",
+  "return_min": "18:00",
+  "return_max": "23:59",
+  "min_nights": 2,
+  "max_nights": 2,
+  "budget": 100,
+  "max_stops": 0,
+  "return_airport": "same",
+  "allow_self_transfer": false,
+  "adults": 1,
+  "children": 0,
+  "baggage": "base",
+  "airline_mode": "all",
+  "final_arrival_max": "23:59",
+  "min_destination_hours": 0
+}
+```
+
+| Campo | Regole / valori |
+|---|---|
+| `origins` | VCE, TSF, VRN, BLQ, BGY; almeno una, default VCE + TSF |
+| `destinations` | Assente o vuoto = Ovunque; altrimenti lista IATA o stringa separata da virgole/spazi, massimo 200 |
+| `start_date`, `end_date` | Obbligatorie; inizio non nel passato; periodo massimo 366 giorni; entrambe le date del viaggio devono rientrare nel periodo |
+| `departure_days`, `return_days` | Liste di interi: lunedì 0 … domenica 6; default venerdì 4 / domenica 6 |
+| `departure_min/max`, `return_min/max` | HH:MM nello stesso giorno, inclusivi al minuto; default 18:00–23:59 |
+| `min_nights`, `max_nights` | 1–30, default 2; differenza tra le date di partenza delle due tratte, non notti in hotel |
+| `budget` | Totale EUR per tutti i viaggiatori e le due tratte; positivo, massimo 100000, default 100 |
+| `adults`, `children` | Almeno un adulto, massimo 9 persone; bambini con posto, niente neonati in questa modalità |
+| `max_stops` | 0 (default) o 1 per ciascuna tratta |
+| `allow_self_transfer` | Default false; true include anche coincidenze la cui protezione non è dichiarata |
+| `return_airport` | `same` (default) oppure `group` |
+| `airline_mode` | `all` (default) oppure `low_cost`, elenco esplicito nel modulo flexible |
+| `baggage` | `base` (default), `cabin`, `checked`: filtri Google, non attestazione del bagaglio incluso dal vettore |
+| `final_arrival_max` | Facoltativo HH:MM: arrivo a casa entro quell'ora nel giorno scelto per il ritorno |
+| `min_destination_hours` | 0–720, default 0; minimo tempo reale tra arrivo dell'andata e partenza del ritorno |
+
+Il piano restituisce `request` normalizzata e `plan` con:
+
+- `date_pairs`: tutte le coppie che rispettano giorni e notti;
+- `destinations`, `candidate_count`, `coverage`: candidati e provenienza;
+- `distinct_searches`: interrogazioni differenti;
+- `searches_upper_bound`: massimo di chiamate per una scansione senza
+  arresti, contando anche le tratte ripetute in caso di scadenza della cache;
+- `estimated_minutes`: tempo a quel massimo con l'intervallo configurato
+  (1,5 secondi di default);
+  i tempi di rete si aggiungono, le cache e le andate fuori filtro riducono il lavoro.
+
+Più di 50000 combinazioni genera un errore esplicito: il piano non viene
+troncato. Ovunque usa l'unione dei cataloghi delle origini come candidati;
+la copertura non è esaustiva, soprattutto per rotte nuove o con scalo.
+
+### GET `/api/flexible/jobs/<id>`
+
+Parametri facoltativi: `sort=price|useful`, `offset=0`. Restituisce 50
+risultati per pagina e `has_more`. Lo stato contiene `completed`, `total`,
+`current`, `issues`, `result_count`, `unverified`, `request`, `plan`
+e `results`. `unverified` conta le righe scartate per dati insufficienti,
+non un conteggio univoco di voli.
+
+Stati: `running`, `cancelling`, `cancelled`, `blocked`,
+`interrupted`, `complete`. Complete significa che tutti i candidati
+del piano sono stati esaminati, non copertura di tutti i voli esistenti.
+Blocked/interrupted non equivalgono a nessuna disponibilità.
+
+Ogni risultato contiene `outbound` e `inbound`, entrambe con `segments`,
+prezzo, valuta, viaggiatori, bagaglio, `checked_at` e link di ricerca Google.
+Ogni segmento ha aeroporti, compagnia, numero volo e orari ISO con fuso.
+I campi comuni sono:
+
+- `price`: somma dei due prezzi, non prezzo della sola andata;
+- `ticketing: "separate_one_way"`: due biglietti distinti;
+- `nights`: giorni di calendario tra partenza e ritorno;
+- `useful_minutes`: arrivo a destinazione → ripartenza, calcolato in UTC
+  anche durante i cambi di ora;
+- `verification: "google_live"`, `airline_verified: false`: dati di
+  shopping osservati su Google, senza conferma diretta del vettore;
+- `needs_recheck`: true dopo cinque minuti dalla quotazione più vecchia.
+
+Gli orari locali ambigui o inesistenti al cambio di ora vengono scartati
+se la fonte non consente di determinarne il fuso senza ambiguità.
+
+### Arresto, ripresa e ricontrollo
+
+- `POST /api/flexible/jobs/<id>/cancel`: richiede l'arresto tra due chiamate.
+- `POST /api/flexible/jobs/<id>/resume`: riprende il lavoro salvato; risponde 202.
+- `POST /api/flexible/jobs/<id>/results/<result_id>/recheck`: rilegge
+  entrambe le tratte saltando la cache e cerca gli stessi numeri di volo,
+  aeroporti e orari. Restituisce `confirmed` con il nuovo risultato e
+  `price_changed`, oppure `not_confirmed` / `outside_filters`.
+  Le coppie non confermate sono escluse dalle successive pagine di risultati.
+
+Errori: 400 filtri invalidi, 404 lavoro/risultato assente, 409 lavoro già in
+corso o ripresa non consentita, 503 ricontrollo indisponibile. La forma
+dell'errore è `{"error":"..."}`, con `status: "unavailable"` nel 503.
+
+La persistenza usa SQLite locale. Un processo gestisce un solo lavoro attivo.
+Il riavvio non rilancia la scansione: lo stato è presentato come interrupted e
+l'utente può riprendere. Le richieste Google sono seriali e distanziate di 1,5
+secondi per default; `FLIGHT_FINDER_GOOGLE_INTERVAL` consente di scegliere un
+intervallo fra 1 e 10 secondi. Un reset o timeout di rete transitorio viene
+ritentato al massimo due volte con attesa crescente. Un 403/429 ferma subito
+il lavoro e attiva un cooldown di 15 minuti nel processo.
+
+---
+
+## API precedenti (`/classic`)
+
+Il loro formato rimane disponibile per compatibilità. Un'offerta con ritorno
+non selezionato non soddisfa la verifica A/R del Weekend Finder.
 
 ## POST `/api/search`
 
@@ -118,15 +247,16 @@ curl -X POST http://localhost:5001/api/search \
 ### Campi da leggere con attenzione
 
 - **`price`** è il totale per tutti i passeggeri, non a persona.
-- **`inbound_pending: true`** significa: la ricerca era A/R, il prezzo è già quello
-  A/R, ma il volo di rientro va scelto su Google dopo aver fissato l'andata. È il
-  comportamento della pagina originale, non un dato mancante.
+- **`inbound_pending: true`** significa che il ritorno non è stato selezionato.
+  Il prezzo iniziale A/R non prova che il rientro rispetti i filtri: usa la nuova
+  API flexible quando serve una coppia completa con orari di ritorno verificati.
 - **`duration_min`** di un leg include il tempo a terra negli scali.
 - **`co2_delta_pct`** è lo scarto rispetto alla media della rotta: negativo = meglio.
 - **`providers`** elenca chi ha effettivamente risposto. Se cambia fra una ricerca e
   l'altra, il primario era temporaneamente rifiutato da Google.
-- **`flight_number` e `airline_code`** sono valorizzati solo dal provider `fli`:
-  la pagina HTML da cui legge `fast-flights` non li espone.
+- **`flight_number` e `airline_code`** possono mancare nel parser classic di
+  `fast-flights`. La nuova API flexible li legge dai dati strutturati della pagina
+  ed esclude le offerte che ne sono prive.
 
 ---
 
@@ -140,14 +270,15 @@ offerta per ciascuna**, una riga per meta. Accetta gli stessi filtri di
 |---|---|---|---|
 | `destinations` | lista di IATA | — | Elenco esplicito, ha la precedenza |
 | `destination_set` | chiave di rosa | `europe-short` | Vedi sotto |
-| `max_destinations` | int 1–60 | `20` | Più mete = più lento |
+| `max_destinations` | int 1–200 | `150` | Per aeroporto di partenza; più mete = più lento |
 
 Rose disponibili: `europe-short` (20), `europe-wide` (50), `sun` (30),
 `city-break` (29), `long-haul` (30). L'elenco aggiornato con le etichette è in
 `flightcore/airports.py` e viene passato alla pagina.
 
-Le ricerche girano in parallelo con al massimo 4 richieste contemporanee: una
-scansione di 12 mete su due aeroporti richiede circa 5 secondi.
+I tempi dipendono dal numero di mete, dalla cache, dal limite delle richieste
+e dalla risposta di Google. La scansione classic è sincrona; quella flexible
+espone progresso e arresto/ripresa.
 
 ```bash
 curl -X POST http://localhost:5001/api/explore \
@@ -234,8 +365,8 @@ Stato del sistema. Utile quando una ricerca torna vuota.
 }
 ```
 
-- `consent_cookies` **deve contenere `SOCS`**. Se manca, il consenso cookie non è
-  stato ottenuto e ogni ricerca tornerà vuota.
+- `consent_cookies` elenca solo i nomi dei cookie ottenuti. Se Google richiede
+  il consenso e `SOCS` manca, la ricerca può ricevere una pagina senza voli.
 - `paused: true` indica un provider messo in pausa dal circuit breaker;
   `retry_in_s` dice fra quanto verrà riprovato.
 - `failures` conta i guasti veri, `empties` le risposte valide ma senza offerte.
@@ -244,6 +375,9 @@ Stato del sistema. Utile quando una ricerca torna vuota.
 ---
 
 ## DELETE `/api/cache`
+
+Questo endpoint riguarda il motore classic. Non elimina i lavori flexible e
+non azzera il loro cooldown: per un prezzo flexible aggiornato usa `recheck`.
 
 Azzera la cache dei risultati (15 minuti) e riapre tutti i circuit breaker.
 Utile per forzare una ricerca fresca o per far ritentare subito un provider in pausa.

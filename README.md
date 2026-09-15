@@ -1,39 +1,31 @@
-# ✈️ Flight Finder — voli economici da VCE/TSF
+# Flight Finder · Weekend Finder
 
-Portale per trovare voli economici da Venezia Marco Polo (VCE) e Treviso Canova (TSF)
-verso qualsiasi destinazione, con i dati di **Google Flights**.
+Portale locale per trovare viaggi A/R economici da **Venezia, Treviso, Verona,
+Bologna e Bergamo**, con dati di Google Flights e filtri precisi su giorni e orari.
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
-![Flask](https://img.shields.io/badge/Flask-3.1-green.svg)
-![Nessuna_API_key](https://img.shields.io/badge/API%20key-non%20richiesta-brightgreen.svg)
+## Cosa puoi cercare
 
-## Perché Google Flights e non Amadeus
+La pagina principale apre **Weekend Finder** con venerdì dopo le 18,
+ritorno domenica dopo le 18, VCE + TSF, 2 notti, voli diretti e budget
+totale di 100 €. **Flexible Trip Finder** permette altre combinazioni di
+giorni e durate, per esempio giovedì–domenica oppure 3–5 notti.
 
-Questo progetto usava le API Amadeus Self-Service. Il problema è che Amadeus copre
-male le compagnie low-cost: partendo da VCE/TSF significa non vedere Ryanair, Wizz
-ed easyJet, cioè la quasi totalità dei voli economici dal Veneto.
+- Origini multiple e destinazioni Ovunque o aeroporti specifici.
+- Periodo di ricerca e giorni della settimana distinti per andata e ritorno.
+- Fasce orarie locali al minuto, applicate di nuovo ai voli restituiti.
+- Notti di calendario, con entrambi i giorni di viaggio compresi nel periodo.
+- Ritorno nello stesso aeroporto oppure in uno qualunque del gruppo selezionato.
+- Budget totale per tutti i viaggiatori, adulti e bambini con posto.
+- Diretti o massimo uno scalo; self-transfer come preferenza separata.
+- Tutte le compagnie o una selezione esplicita di low-cost; filtro tariffa base,
+  trolley o stiva.
+- Arrivo finale entro un orario nel giorno di ritorno, per escludere arrivi
+  dopo mezzanotte; minimo tempo utile a destinazione.
+- Ordinamento per prezzo A/R o tempo utile; ricontrollo dei voli selezionati.
 
-Con i dati di Google Flights lo stesso weekend a Barcellona passa da "nessun
-risultato utile" a **VCE→BCN a 40 €** con Ryanair. In più non serve registrarsi,
-non ci sono chiavi API e non c'è un tetto mensile di chiamate.
+## Avvio
 
-## Funzionalità
-
-- **Ricerca "ovunque"** — scandisce una rosa di destinazioni e mostra la migliore
-  offerta per ciascuna, una riga per meta.
-- **Ricerca su due aeroporti insieme** — VCE e TSF in un'unica query, risultati uniti
-  e ordinati.
-- **Filtri applicati da Google, non a posteriori** — fascia oraria di partenza e
-  ritorno, numero di scali, tetto di prezzo, classe, compagnie.
-- **Calendario prezzi** — quanto costa la stessa rotta giorno per giorno su 45 giorni.
-- **Dati ricchi** — scali, tempo a terra, tipo di aereo, spazio per le gambe,
-  emissioni di CO₂ confrontate con la media della rotta.
-- **Autocomplete offline** — 7.835 aeroporti, con i nomi italiani ("londra", "zurigo").
-- **Nessuna chiave API, nessuna registrazione.**
-
-## Avvio rapido
-
-Serve **Python 3.10 o superiore** (le librerie dei provider usano sintassi moderna).
+Versioni verificate con **Python 3.12**.
 
 ```bash
 python3 -m venv .venv
@@ -42,109 +34,94 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Apri [http://localhost:5001](http://localhost:5001). Il file `.env` è opzionale:
-senza, valgono i valori predefiniti (Italia, italiano, euro).
+Apri [il portale locale](http://localhost:5001/). La nuova interfaccia è anche
+su `/weekends`; quella precedente rimane su `/classic`.
 
-## Come funziona
+## Che cosa significa un risultato valido
 
-Nessuna delle librerie disponibili è ufficiale né affidabile da sola, quindi
-l'app ne usa **due in cascata** dietro un'interfaccia comune:
+Il motore cerca **due tratte di sola andata** e ne somma i prezzi. Ogni
+risultato contiene entrambe le tratte, con data, aeroporti, numero di volo,
+compagnia, orari e prezzo. Vengono escluse le righe prive di identità o prezzo
+live, i voli fuori filtro e i collegamenti di cui non è nota la protezione
+quando il self-transfer è disabilitato.
 
-| Provider | Come ottiene i dati | Risultati tipici | Ruolo |
-|---|---|---|---|
-| [`fli`](https://github.com/punitarani/fli) | endpoint interno di Google | ~138 per rotta | primario |
-| [`fast-flights`](https://github.com/AWeirdDev/flights) | HTML della pagina | ~8 per rotta | riserva |
+Il risultato è una combinazione di **due biglietti separati**: non è una
+tariffa A/R unica emessa dal vettore. Il prezzo copre tutti i viaggiatori
+selezionati. I bagagli sono un filtro del confronto Google; peso, dimensioni,
+inclusione esatta e prezzo finale vanno verificati dal venditore.
 
-`fli` restituisce molto di più — nei test ha trovato un British Airways diretto a
-96 € che `fast-flights` non vedeva — ma il suo endpoint viene rifiutato da Google a
-intermittenza. Quando succede, `fast-flights` subentra senza che l'utente se ne
-accorga, e un **circuit breaker** smette di interrogare per 5 minuti il provider
-che non risponde, invece di pagarne il timeout a ogni ricerca.
+`verification: google_live` significa che Google ha restituito una
+quotazione con dati di shopping nel momento indicato da `checked_at`.
+**Non è una conferma di emissione o disponibilità diretta della compagnia**:
+`airline_verified` resta `false`. Il portale non prenota né compra biglietti.
 
-Lo stato dei provider è sempre visibile in alto a destra nella pagina e su
-`GET /api/health`.
+Dopo cinque minuti il prezzo è marcato da ricontrollare. Il pulsante dedicato
+ricerca nuovamente gli stessi voli su entrambe le tratte; aggiorna il totale
+oppure rimuove dalle offerte valide la coppia che non viene confermata.
+Un errore di rete viene segnalato come controllo non disponibile.
 
-### Il consenso cookie, ovvero perché gli altri "non funzionano"
+## Ovunque, cataloghi e ricerche lunghe
 
-Da un IP europeo, ogni richiesta a Google Flights viene intercettata da
-`consent.google.com` finché il client non possiede il cookie `SOCS`. Nessuna delle
-librerie lo gestisce: ricevono la pagina di consenso, non trovano i dati e
-**restituiscono zero risultati senza sollevare errori**. È la causa di buona parte
-delle segnalazioni "funziona per tutti tranne che a me" nelle loro issue.
+Il catalogo di aeroporti serve a riconoscere i codici IATA. Le tabelle di rotte
+di Wikipedia, risolte tramite Wikidata e conservate in uno snapshot locale,
+forniscono **destinazioni candidate**. Non sono un calendario operativo e
+non dimostrano che un volo sia vendibile in una data specifica.
 
-`flightcore/consent.py` esegue una volta il flusso *Reject all* (rifiuta i cookie di
-profilazione: basta a ottenere `SOCS` ed è la scelta meno invasiva), mette il
-risultato in cache su disco e lo inietta nei client HTTP dei due provider — che
-usano librerie diverse, `curl_cffi` e `primp`, e vanno agganciati separatamente.
+Ovunque controlla l'unione delle destinazioni candidate da tutte le origini
+scelte. La copertura **non è esaustiva**: può mancare una nuova rotta o una
+meta raggiungibile con scalo. La scelta di aeroporti specifici permette di
+cercare anche fuori dal catalogo di rotte.
 
-Senza questo passaggio l'intero portale restituisce zero risultati.
+Prima di partire la pagina mostra combinazioni e quantità massima di
+controlli per una scansione completa. Un trimestre su molti aeroporti può
+richiedere ore: ogni tratta richiede una ricerca, e Google può limitarle.
+Le richieste sono sequenziali, distanziate di 1,5 secondi per impostazione
+predefinita nel nuovo motore, con cache di cinque minuti. L'intervallo resta
+configurabile fra 1 e 10 secondi con `FLIGHT_FINDER_GOOGLE_INTERVAL`. Un reset
+o timeout di rete transitorio viene ritentato al massimo due volte con attesa crescente. Un 403/429
+interrompe la ricerca, conserva il progresso e impone una pausa di quindici
+minuti nel processo.
 
-## Struttura
+I lavori sono salvati in `.cache/weekends.sqlite3`: puoi fermarli e
+riprenderli, anche dopo un riavvio del server. Il lavoro attivo procede
+finché il processo è acceso; non riparte automaticamente dopo un riavvio.
+Il percorso della cache è configurabile con `FLIGHT_FINDER_CACHE_DIR`
+nell'ambiente del processo. La pagina ripristina l'ultima ricerca del browser.
 
-```
-flight-finder/
-├── app.py                    # rotte Flask e validazione delle richieste
-├── flightcore/
-│   ├── consent.py            # consenso cookie di Google + iniezione nei client
-│   ├── engine.py             # catena di fallback, multi-origine, "ovunque"
-│   ├── models.py             # modello normalizzato comune ai provider
-│   ├── breaker.py            # circuit breaker per provider
-│   ├── cache.py              # cache in memoria con scadenza
-│   ├── airports.py           # catalogo IATA offline + alias italiani
-│   └── providers/
-│       ├── fli_provider.py           # primario
-│       └── fastflights_provider.py   # riserva
-├── templates/index.html      # interfaccia
-├── tests/test_core.py        # test senza rete
-└── docs/API.md               # documentazione degli endpoint
-```
+## Architettura
 
-## API
+- `flightcore/flexible.py`: validazione, combinazioni, fusi orari e filtri.
+- `flightcore/live_quotes.py`: query di **fast-flights** e decoder di **fli**,
+  con controlli sul formato e sull'identità dei voli.
+- `flightcore/flexible_jobs.py`: lavori persistenti, arresto, ripresa e ricontrollo.
+- `flightcore/flexible_api.py`: API e pagina principale.
+- `templates/weekends.html` e `static/weekends.*`: interfaccia senza CDN.
+- `flightcore/consent.py`: consenso Google, limitato ai client del provider.
+- `flightcore/engine.py` e `providers/`: motore precedente della pagina classic.
 
-| Endpoint | Metodo | Descrizione |
-|---|---|---|
-| `/api/search` | POST | Voli su una rotta, da uno o più aeroporti di partenza |
-| `/api/explore` | POST | Ricerca "ovunque" su una rosa di destinazioni |
-| `/api/cheapest-dates` | POST | Calendario prezzi su un intervallo di date |
-| `/api/airports?q=` | GET | Autocomplete aeroporti (offline) |
-| `/api/health` | GET | Stato dei provider e del consenso cookie |
-| `/api/cache` | DELETE | Azzera cache e circuit breaker |
+Sono librerie non ufficiali: modifiche a Google, consenso, limitazioni dell'IP
+o cambi del formato possono interrompere il servizio. Un singolo processo
+Flask gestisce un lavoro attivo per volta. Questa versione è pensata per uso
+locale; non contiene una coda condivisa tra più processi o autenticazione per
+un servizio pubblico.
 
-Parametri ed esempi completi in **[docs/API.md](docs/API.md)**.
+Parametri e ciclo di vita sono documentati in [docs/API.md](docs/API.md).
 
-## Test
+## Verifica
 
 ```bash
-python -m pytest tests/ -q
+python -m pytest -q
+python -m ruff check .
+node --check static/weekends.js
 ```
 
-I test coprono circuit breaker, cache, normalizzazione dei risultati, catalogo
-aeroporti e validazione delle richieste. Non fanno chiamate di rete: le ricerche
-vere dipendono da Google e dal momento della giornata.
+I test usano quotazioni sintetiche e cataloghi locali: non interrogano Google.
+Coprono filtri al minuto, date, fusi e cambio ora, arrivi il giorno successivo,
+somma dei prezzi, righe incomplete, cache, blocchi, arresto/ripresa,
+persistenza e ricontrollo.
 
-## Limiti da conoscere
+## Licenza e dipendenze
 
-- **Le librerie non sono ufficiali.** Google ha chiuso la Flights API pubblica nel
-  2018; questi progetti fanno reverse engineering e possono smettere di funzionare
-  senza preavviso. Va bene per uso personale, meno per un servizio pubblico — e
-  formalmente è contrario ai Termini di servizio di Google.
-- **Le raffiche di richieste vengono rifiutate.** L'app limita la concorrenza a 4
-  richieste e mette in cache i risultati per 15 minuti proprio per questo. Se una
-  ricerca torna vuota, spesso basta riprovare dopo qualche minuto.
-- **In cloud funziona peggio.** Gli IP dei datacenter vengono bloccati molto più
-  spesso di quelli residenziali: da locale la resa è nettamente migliore.
-- **Sull'andata e ritorno** il prezzo mostrato è già il totale A/R, ma il volo di
-  rientro si sceglie su Google dopo aver fissato l'andata. È come funziona la
-  pagina originale, e l'interfaccia lo segnala esplicitamente.
-- I prezzi sono indicativi, non includono bagagli extra e il totale si riferisce a
-  tutti i passeggeri selezionati.
-
-## Licenza
-
-MIT. I provider hanno licenze proprie: vedi
+Codice del portale: MIT. Le dipendenze mantengono le rispettive licenze:
 [punitarani/fli](https://github.com/punitarani/fli) e
 [AWeirdDev/flights](https://github.com/AWeirdDev/flights).
-
----
-
-Creato con ❤️ per trovare voli economici dal Veneto

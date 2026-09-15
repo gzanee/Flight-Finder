@@ -1,8 +1,9 @@
 """
 Catalogo aeroporti, completamente offline.
 
-fli incorpora 7.835 aeroporti con il nome esteso: basta a sostituire l'endpoint
-di autocomplete di Amadeus senza chiave API e senza chiamate di rete.
+Il catalogo principale arriva da ``fli``. ``airportsdata`` aggiunge i codici
+IATA correnti che possono mancare nell'enum statico di fli, mantenendo
+l'autocomplete indipendente dalla rete.
 """
 
 from __future__ import annotations
@@ -173,11 +174,25 @@ DEFAULT_DESTINATION_SET = "europe-short"
 @functools.lru_cache(maxsize=1)
 def _catalog() -> dict[str, str]:
     """Mappa codice IATA -> nome esteso, letta una volta sola."""
+    catalog: dict[str, str] = {}
+    try:
+        import airportsdata
+
+        catalog.update(
+            {
+                code: info["name"]
+                for code, info in airportsdata.load("IATA").items()
+                if info.get("name")
+            }
+        )
+    except ImportError:
+        pass
     try:
         from fli.models import Airport
     except ImportError:
-        return dict(HOME_AIRPORTS)
-    return {airport.name: airport.value for airport in Airport}
+        return {**catalog, **HOME_AIRPORTS}
+    catalog.update({airport.name: airport.value for airport in Airport})
+    return {**catalog, **HOME_AIRPORTS}
 
 
 def name(code: str) -> str | None:

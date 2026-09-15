@@ -5,9 +5,8 @@ flask==3.1.3
 python-dotenv==1.2.3
 
 # Provider Google Flights (non ufficiali, nessuna chiave API richiesta).
-# fli e' il primario: parla con l'endpoint interno di Google e restituisce
-# l'elenco completo dei voli. fast-flights e' la riserva: legge l'HTML, da'
-# meno risultati ma risponde quando l'endpoint interno rifiuta le richieste.
+# Weekend Finder usa il generatore di query di fast-flights e il decoder di fli.
+# La pagina classic conserva la catena primario/riserva dei provider precedenti.
 flights==0.9.0          # su PyPI il pacchetto "flights" e' punitarani/fli
 fast-flights==3.1.0
 
@@ -18,3 +17,6 @@ primp==2.0.0
 # Test e lint
 pytest==9.1.1
 ruff==0.16.7
+
+# Fusi orari aeroporti per durate reali e cambio ora
+airportsdata==20260905

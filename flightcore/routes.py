@@ -1,11 +1,11 @@
 """
-Destinazioni realmente servite da un aeroporto.
+Destinazioni candidate da tabelle pubbliche delle rotte di un aeroporto.
 
 Le rose di destinazioni in `airports.py` sono elenchi curati a mano: utili come
 punto di partenza, ma non sanno nulla delle rotte vere. Se Ryanair apre domani
 VCE-Riga, quell'elenco non se ne accorge.
 
-Qui ricostruiamo invece la lista reale, in due passaggi:
+Qui ricostruiamo una lista di candidati, in due passaggi:
 
 1. la tabella "Airlines and destinations" della pagina Wikipedia dell'aeroporto
    da' i collegamenti alle destinazioni servite;
@@ -19,6 +19,8 @@ ufficiale, oppure nessun codice.
 Il risultato viene messo in cache su disco per 30 giorni (le mappe delle rotte
 cambiano con le stagioni, non con le ore). Se la rete non risponde o Wikipedia
 cambia formato, si ricade sullo snapshot incluso nel repository.
+Le fonti possono essere incomplete o obsolete: questa lista non prova che un
+volo operi in una data specifica e non contiene disponibilita' o prezzi.
 """
 
 from __future__ import annotations
@@ -46,6 +48,9 @@ IATA_LENGTH = 3
 WIKI_PAGES = {
     "VCE": "Venice_Marco_Polo_Airport",
     "TSF": "Treviso_Airport",
+    "VRN": "Verona_Villafranca_Airport",
+    "BLQ": "Bologna_Guglielmo_Marconi_Airport",
+    "BGY": "Milan_Bergamo_Airport",
 }
 
 SNAPSHOT = Path(__file__).parent / "data" / "routes.json"
