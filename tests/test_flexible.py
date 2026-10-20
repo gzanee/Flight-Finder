@@ -565,7 +565,7 @@ def test_live_adapter_caches_identical_searches_but_fresh_bypasses(tmp_path, mon
     assert len(calls) == 2
 
 
-def test_flexible_api_invalid_payload_and_page_without_network(monkeypatch, tmp_path):
+def test_flexible_api_invalid_payload_and_page_without_network(monkeypatch, tmp_path, frozen_today):
     import flightcore.flexible_api as endpoints
     from app import app
 

@@ -237,7 +237,7 @@ def test_old_job_without_new_fields_resumes(tmp_path):
     assert manager.public(job_id)["result_count"] == 1
 
 
-def test_all_entry_points_use_same_worker_and_calendar(monkeypatch, tmp_path):
+def test_all_entry_points_use_same_worker_and_calendar(monkeypatch, tmp_path, frozen_today):
     from app import app
     from flightcore import flexible_api
 
