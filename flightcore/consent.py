@@ -12,8 +12,8 @@ me" nelle issue di quei progetti.
 
 Questo modulo esegue una volta il flusso "Reject all" (rifiuta tutti i cookie
 di profilazione: e' sufficiente a ottenere SOCS ed e' la scelta meno invasiva),
-mette in cache il risultato su disco e inietta i cookie nei client HTTP usati
-dai provider.
+mette in cache il risultato su disco; ``live_quotes`` passa i cookie a ogni
+richiesta verso Google Flights.
 """
 
 from __future__ import annotations
@@ -40,7 +40,6 @@ _RELEVANT_COOKIES = ("SOCS", "CONSENT", "__Secure-ENID")
 
 _lock = threading.Lock()
 _cookies: dict[str, str] | None = None
-_installed = False
 
 
 def _cache_path() -> Path:
@@ -134,78 +133,3 @@ def get_cookies(
         if _cookies:
             _write_cache(_cookies)
         return _cookies
-
-
-def cookie_header(**kwargs) -> str:
-    return "; ".join(f"{k}={v}" for k, v in get_cookies(**kwargs).items())
-
-
-def install(country: str = "IT", currency: str = "EUR", refresh: bool = False) -> dict[str, str]:
-    """
-    Inietta i cookie di consenso nei client HTTP dei provider.
-
-    Va chiamata prima della prima richiesta: entrambe le librerie copiano gli
-    header alla creazione della sessione, quindi iniettare dopo non avrebbe
-    effetto sulle sessioni gia' aperte.
-    """
-    global _installed
-    cookies = get_cookies(country=country, currency=currency, refresh=refresh)
-    if not cookies:
-        return cookies
-
-    with _lock:
-        _install_into_fli(cookies, reset_sessions=refresh or _installed)
-        _install_into_primp(cookies)
-        _installed = True
-    return cookies
-
-
-def install_fast_flights(country: str = "IT", currency: str = "EUR") -> dict[str, str]:
-    """
-    Inietta il consenso solo nel fetcher di fast-flights.
-
-    Il provider la chiama da se' prima di ogni ricerca: cosi' non dipende da un
-    ``install()`` all'avvio dell'app. E' idempotente (avvolge sempre il
-    ``primp.Client`` originale) e non tocca fli, che dalla 0.10 invia gia' il
-    proprio cookie SOCS.
-    """
-    cookies = get_cookies(country=country, currency=currency)
-    if cookies:
-        with _lock:
-            _install_into_primp(cookies)
-    return cookies
-
-
-def _install_into_fli(cookies: dict[str, str], reset_sessions: bool) -> None:
-    """fli usa curl_cffi e copia Client.DEFAULT_HEADERS in ogni sessione."""
-    try:
-        import fli.search.client as fli_client
-    except ImportError:
-        return
-
-    header = "; ".join(f"{k}={v}" for k, v in cookies.items())
-    fli_client.Client.DEFAULT_HEADERS = {**fli_client.Client.DEFAULT_HEADERS, "cookie": header}
-    if reset_sessions:
-        # Le sessioni sono in un threading.local del singleton: per propagare un
-        # cookie rinnovato bisogna buttare via il singleton, non solo gli header.
-        fli_client.client = None
-
-
-def _install_into_primp(cookies: dict[str, str]) -> None:
-    """Attach consent only to the Google fetcher, never to unrelated HTTP clients."""
-    try:
-        import primp
-        from fast_flights import fetcher
-    except ImportError:
-        return
-
-    original = primp.Client
-
-    def factory(*args, **kwargs):
-        merged = dict(cookies)
-        merged.update(kwargs.get("cookies") or {})
-        kwargs["cookies"] = merged
-        kwargs.setdefault("timeout", 25)
-        return original(*args, **kwargs)
-
-    fetcher.Client = factory

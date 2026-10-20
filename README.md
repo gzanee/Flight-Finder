@@ -127,8 +127,7 @@ finora senza una seconda scansione.
 - `app.py`: avvio, autocomplete e traduzione delle vecchie richieste.
 
 I nomi di alcuni file conservano “flexible” o “weekends” per continuità;
-tutte le modalità usano questi stessi componenti. I vecchi moduli `engine.py`
-e `providers/` non vengono più utilizzati dalle route del portale.
+tutte le modalità usano questi stessi componenti.
 
 Le API principali sono `/api/search/plan` e `/api/search/jobs`; `/api/flexible/*`
 resta un alias sullo stesso manager. Le vecchie `/api/search`, `/api/explore`
