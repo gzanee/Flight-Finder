@@ -9,20 +9,19 @@ ignore = [
     # associarli a UTC li renderebbe sbagliati. Le date di ricerca sono giorni
     # di calendario, non istanti. I naive datetime qui sono deliberati.
     "DTZ001", "DTZ007", "DTZ011",
-    # I provider sono librerie di scraping non ufficiali che sollevano di tutto
-    # (IndexError, AttributeError, errori di rete). Catturare Exception e'
-    # intenzionale: un provider che esplode non deve far cadere la ricerca.
+    # Le librerie di scraping non ufficiali sollevano di tutto (IndexError,
+    # AttributeError, errori di rete). Catturare Exception e' intenzionale:
+    # una pagina inattesa non deve far cadere la ricerca.
     "BLE001",
-    # I provider importano le loro librerie dentro le funzioni, di proposito:
-    # tiene l'avvio rapido, permette ad available() di rispondere senza che la
-    # dipendenza sia installata, ed evita di caricare insieme librerie che
-    # registrano lo stesso file protobuf e andrebbero in conflitto.
+    # Le librerie di Google Flights si importano dentro le funzioni, di
+    # proposito: tiene l'avvio rapido ed evita di caricare insieme librerie
+    # che registrano lo stesso file protobuf e andrebbero in conflitto.
     "PLC0415",
     # Le funzioni di costruzione dei filtri hanno molti parametri perche' tali
     # sono i filtri di Google: raggrupparli a forza li renderebbe meno chiari.
     "PLR0913", "PLR0917",
-    # Lo stato dei moduli consent/cache e' deliberatamente globale: il cookie di
-    # consenso e la cache sono condivisi da tutto il processo.
+    # Lo stato del modulo consent e' deliberatamente globale: il cookie di
+    # consenso e' condiviso da tutto il processo.
     "PLW0603",
 ]
 
@@ -30,7 +29,6 @@ ignore = [
 # Confronti con 2 (tratte di un A/R) e 23 (ore del giorno): scriverli come
 # costanti li renderebbe meno leggibili, non piu'.
 "app.py" = ["PLR2004"]
-"flightcore/models.py" = ["PLR2004"]
 "flightcore/airports.py" = ["PLR2004"]
 "flightcore/routes.py" = ["PLR2004"]
 "tests/*" = ["PLR2004"]

@@ -639,27 +639,6 @@ def test_google_request_interval_is_configurable_with_safe_bounds(monkeypatch):
     assert request_interval() == 1.5
 
 
-def test_consent_is_scoped_to_google_fetcher_and_refreshes(monkeypatch):
-    import primp
-    from fast_flights import fetcher
-
-    from flightcore.consent import _install_into_primp
-
-    seen = []
-
-    def client(**kwargs):
-        seen.append(kwargs)
-
-    monkeypatch.setattr(primp, "Client", client)
-    monkeypatch.setattr(fetcher, "Client", client)
-    _install_into_primp({"SOCS": "first-synthetic"})
-    fetcher.Client()
-    _install_into_primp({"SOCS": "second-synthetic"})
-    fetcher.Client()
-    assert primp.Client is client
-    assert [c["cookies"]["SOCS"] for c in seen] == ["first-synthetic", "second-synthetic"]
-
-
 def test_real_worker_cancellation_and_single_active_job(tmp_path):
     entered, release = Event(), Event()
     live = FakeLive()

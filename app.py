@@ -110,7 +110,9 @@ def api_health():
     return jsonify(
         success=True,
         engine="unified",
-        providers=["fli", "fast-flights"],
+        # Nessun provider alternativo: live_quotes scarica la pagina di Google
+        # Flights e usa le due librerie solo per costruire e decodificare.
+        libraries={"fast-flights": "query", "fli": "decoder"},
         retry_in_s=max(0, round(live.blocked_until - time.monotonic())),
         country="IT",
         currency="EUR",
