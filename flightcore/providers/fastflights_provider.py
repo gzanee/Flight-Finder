@@ -81,7 +81,11 @@ class FastFlightsProvider(Provider):
         from fast_flights.fetcher import fetch_flights_html
         from fast_flights.parser import parse
 
+        from ..consent import install_fast_flights
+
         gq = self._query(query)
+        # Senza SOCS un IP europeo riceve la pagina di consenso al posto dei voli.
+        install_fast_flights(currency=query.currency)
         limiter.acquire()
         try:
             html = fetch_flights_html(gq)

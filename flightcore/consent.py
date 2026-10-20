@@ -160,6 +160,22 @@ def install(country: str = "IT", currency: str = "EUR", refresh: bool = False) -
     return cookies
 
 
+def install_fast_flights(country: str = "IT", currency: str = "EUR") -> dict[str, str]:
+    """
+    Inietta il consenso solo nel fetcher di fast-flights.
+
+    Il provider la chiama da se' prima di ogni ricerca: cosi' non dipende da un
+    ``install()`` all'avvio dell'app. E' idempotente (avvolge sempre il
+    ``primp.Client`` originale) e non tocca fli, che dalla 0.10 invia gia' il
+    proprio cookie SOCS.
+    """
+    cookies = get_cookies(country=country, currency=currency)
+    if cookies:
+        with _lock:
+            _install_into_primp(cookies)
+    return cookies
+
+
 def _install_into_fli(cookies: dict[str, str], reset_sessions: bool) -> None:
     """fli usa curl_cffi e copia Client.DEFAULT_HEADERS in ogni sessione."""
     try:

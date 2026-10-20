@@ -7,7 +7,10 @@ python-dotenv==1.2.3
 # Provider Google Flights (non ufficiali, nessuna chiave API richiesta).
 # Weekend Finder usa il generatore di query di fast-flights e il decoder di fli.
 # La pagina classic conserva la catena primario/riserva dei provider precedenti.
-flights==0.9.0          # su PyPI il pacchetto "flights" e' punitarani/fli
+# punitarani/fli (su PyPI "flights"). La 0.9.0 non trova piu' voli: da agosto
+# 2026 Google firma le richieste RPC. Il fix (PR #230) legge la pagina pubblica,
+# ma non e' ancora su PyPI: fissiamo il commit di main verificato.
+flights @ git+https://github.com/punitarani/fli.git@881aee5
 fast-flights==3.1.0
 
 # Usata da flightcore/consent.py per il consenso cookie. Arriva gia' come
