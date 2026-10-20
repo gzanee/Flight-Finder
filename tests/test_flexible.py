@@ -576,7 +576,10 @@ def test_flexible_api_invalid_payload_and_page_without_network(monkeypatch, tmp_
         assert client.post("/api/flexible/plan", json=body).status_code == 400
     page = client.get("/")
     assert page.status_code == 200
-    assert b"Weekend Finder" in page.data and b"Flexible Trip Finder" in page.data
+    assert b"trip-type" in page.data and b"date-mode" in page.data
+    assert b"Ricerca classica" not in page.data
+    assert client.get("/classic").headers["Location"] == "/"
+    assert client.get("/weekends").headers["Location"] == "/"
     assert b"cdn.tailwindcss" not in page.data
     plan = client.post("/api/flexible/plan", json=request_spec().to_dict())
     assert plan.status_code == 200 and plan.json["plan"]["searches_upper_bound"] == 2

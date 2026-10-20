@@ -116,8 +116,14 @@ def test_leg_calcola_scali_e_durata_totale():
 def test_offer_espone_scalo_peggiore_e_compagnie_senza_duplicati():
     andata = Leg(segments=[_segment("VCE", "BCN", 8, 10)])
     ritorno = Leg(segments=[_segment("BCN", "MAD", 18, 19), _segment("MAD", "VCE", 21, 23)])
-    offer = Offer(price=99.0, currency="EUR", legs=[andata, ritorno],
-                  origin="VCE", destination="BCN", provider="test")
+    offer = Offer(
+        price=99.0,
+        currency="EUR",
+        legs=[andata, ritorno],
+        origin="VCE",
+        destination="BCN",
+        provider="test",
+    )
     assert offer.stops == 1
     assert offer.airlines == ["Ryanair"]
 
@@ -126,8 +132,15 @@ def test_to_dict_e_serializzabile_e_segnala_il_ritorno_mancante():
     import json
 
     leg = Leg(segments=[_segment("VCE", "BCN", 8, 10)])
-    offer = Offer(price=60.0, currency="EUR", legs=[leg], origin="VCE",
-                  destination="BCN", provider="test", round_trip=True)
+    offer = Offer(
+        price=60.0,
+        currency="EUR",
+        legs=[leg],
+        origin="VCE",
+        destination="BCN",
+        provider="test",
+        round_trip=True,
+    )
     data = offer.to_dict()
     assert data["inbound_pending"] is True
     assert data["outbound"]["from_code"] == "VCE"
@@ -176,13 +189,18 @@ def client():
 @pytest.mark.parametrize(
     "body, atteso",
     [
-        ({"origin": "XXX", "destination": "BCN"}, "partenza sconosciuto"),
-        ({"origin": "VCE", "destination": "ZZZ"}, "Destinazione sconosciuta"),
-        ({"origin": "VCE", "destination": "BCN", "departure_date": "2020-01-01"}, "passato"),
-        ({"origin": "VCE", "destination": "BCN", "departure_date": "boh"}, "Data non valida"),
-        ({"origin": "VCE", "destination": "BCN", "departure_time_min": "99:00"},
-         "fuori intervallo"),
-        ({"origin": "VCE", "destination": "BCN", "adults": 50}, "troppo alto"),
+        ({"origin": "XXX", "destination": "BCN"}, "Partenza:"),
+        ({"origin": "VCE", "destination": "ZZZ"}, "Destinazioni:"),
+        (
+            {"origin": "VCE", "destination": "BCN", "departure_date": "2020-01-01"},
+            "Periodo non valido",
+        ),
+        ({"origin": "VCE", "destination": "BCN", "departure_date": "boh"}, "Indica inizio e fine"),
+        (
+            {"origin": "VCE", "destination": "BCN", "departure_time_min": "99:00"},
+            "Orario non valido",
+        ),
+        ({"origin": "VCE", "destination": "BCN", "adults": 50}, "adults:"),
     ],
 )
 def test_la_validazione_rifiuta_gli_input_sbagliati(client, body, atteso):
@@ -192,11 +210,17 @@ def test_la_validazione_rifiuta_gli_input_sbagliati(client, body, atteso):
 
 
 def test_ritorno_prima_dellandata_viene_rifiutato(client):
-    r = client.post("/api/search", json={
-        "origin": "VCE", "destination": "BCN",
-        "departure_date": "2026-12-10", "return_date": "2026-12-01"})
+    r = client.post(
+        "/api/search",
+        json={
+            "origin": "VCE",
+            "destination": "BCN",
+            "departure_date": "2026-12-10",
+            "return_date": "2026-12-01",
+        },
+    )
     assert r.status_code == 400
-    assert "precedente" in r.get_json()["error"]
+    assert "Periodo non valido" in r.get_json()["error"]
 
 
 def test_calendario_senza_destinazione_viene_rifiutato(client):
@@ -223,21 +247,23 @@ def _offer(price, dep_h, stops=0, ritorno_h=None):
     """Offerta sintetica: andata alle dep_h, con eventuale ritorno alle ritorno_h."""
     segs = [_segment("VCE", "BCN", dep_h, dep_h + 2)]
     if stops:
-        segs = [_segment("VCE", "MAD", dep_h, dep_h + 1),
-                _segment("MAD", "BCN", dep_h + 3, dep_h + 4)]
+        segs = [
+            _segment("VCE", "MAD", dep_h, dep_h + 1),
+            _segment("MAD", "BCN", dep_h + 3, dep_h + 4),
+        ]
     legs = [Leg(segments=segs)]
     if ritorno_h is not None:
         legs.append(Leg(segments=[_segment("BCN", "VCE", ritorno_h, ritorno_h + 2)]))
-    return Offer(price=price, currency="EUR", legs=legs, origin="VCE",
-                 destination="BCN", provider="test")
+    return Offer(
+        price=price, currency="EUR", legs=legs, origin="VCE", destination="BCN", provider="test"
+    )
 
 
 def _filtra(offerte, **kwargs):
     from flightcore.engine import _apply_client_filters
     from flightcore.models import SearchQuery
 
-    query = SearchQuery(origin="VCE", destination="BCN",
-                        departure_date="2026-10-23", **kwargs)
+    query = SearchQuery(origin="VCE", destination="BCN", departure_date="2026-10-23", **kwargs)
     return _apply_client_filters(offerte, query)
 
 
@@ -390,23 +416,16 @@ def test_le_rotte_reali_sono_separate_per_aeroporto():
 
 
 def test_lista_personalizzata_accetta_stringa_e_lista():
-    from app import _destination_list
+    from flightcore.flexible import airport_codes
 
-    assert _destination_list("BCN, LIS ATH") == ["BCN", "LIS", "ATH"]
-    assert _destination_list(["bcn", "lis"]) == ["BCN", "LIS"]
-    assert _destination_list(None) is None
-
-
-def test_lista_personalizzata_rifiuta_codici_inesistenti():
-    import pytest as _pytest
-
-    from app import BadRequest, _destination_list
-
-    with _pytest.raises(BadRequest):
-        _destination_list("ZZZ, QQQ")
+    assert airport_codes("BCN, LIS ATH", "Destinazioni", 200) == ("BCN", "LIS", "ATH")
+    assert airport_codes(["bcn", "lis"], "Destinazioni", 200) == ("BCN", "LIS")
+    assert airport_codes([], "Destinazioni", 200) == ()
 
 
-def test_lista_personalizzata_tiene_i_codici_validi_ignorando_gli_altri():
-    from app import _destination_list
+@pytest.mark.parametrize("codes", ["ZZZ, QQQ", "BCN, ZZZ"])
+def test_lista_personalizzata_non_scartata_silenziosamente(codes):
+    from flightcore.flexible import SearchValidationError, airport_codes
 
-    assert _destination_list("BCN, ZZZ") == ["BCN"]
+    with pytest.raises(SearchValidationError):
+        airport_codes(codes, "Destinazioni", 200)

@@ -199,6 +199,48 @@ def name(code: str) -> str | None:
     return _catalog().get(code.upper())
 
 
+# Names for presentation, independent of route planning and saved quotes.
+DISPLAY_NAMES = {
+    "VCE": ("Venezia", "Venezia Marco Polo"),
+    "TSF": ("Treviso", "Treviso Antonio Canova"),
+    "BCN": ("Barcellona", "Barcellona El Prat"),
+    "BGY": ("Bergamo", "Bergamo Orio al Serio"),
+    "VRN": ("Verona", "Verona Valerio Catullo"),
+    "BLQ": ("Bologna", "Bologna Guglielmo Marconi"),
+    "FCO": ("Roma", "Roma Fiumicino Leonardo da Vinci"),
+    "CIA": ("Roma", "Roma Ciampino"),
+    "MXP": ("Milano", "Milano Malpensa"),
+    "LIN": ("Milano", "Milano Linate"),
+    "LHR": ("Londra", "Londra Heathrow"),
+    "LGW": ("Londra", "Londra Gatwick"),
+    "STN": ("Londra", "Londra Stansted"),
+    "LTN": ("Londra", "Londra Luton"),
+    "CDG": ("Parigi", "Parigi Charles de Gaulle"),
+    "ORY": ("Parigi", "Parigi Orly"),
+    "BVA": ("Beauvais", "Parigi Beauvais-Tillé"),
+    "MAD": ("Madrid", "Madrid Barajas Adolfo Suárez"),
+    "LIS": ("Lisbona", "Lisbona Humberto Delgado"),
+    "OPO": ("Porto", "Porto Francisco Sá Carneiro"),
+}
+
+
+@functools.lru_cache(maxsize=1)
+def _airport_metadata():
+    import airportsdata
+
+    return airportsdata.load("IATA")
+
+
+def details(code: str) -> dict[str, str]:
+    """Readable labels, also for quotes saved before names were introduced."""
+    code = code.upper()
+    metadata = _airport_metadata().get(code, {})
+    full_name = name(code) or metadata.get("name") or "Aeroporto non identificato"
+    city = metadata.get("city") or full_name
+    city, full_name = DISPLAY_NAMES.get(code, (city, full_name))
+    return {"code": code, "city": city, "name": full_name}
+
+
 def exists(code: str) -> bool:
     return code.upper() in _catalog()
 

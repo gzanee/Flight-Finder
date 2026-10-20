@@ -11,12 +11,24 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .flexible import FlexibleRequest, combine, fingerprint, matches
+from .airports import details as airport_details
+from .flexible import FlexibleRequest, combine, fingerprint, matches, return_routes, single_trip
 from .live_quotes import QUOTE_TTL, LiveBlocked, LiveQuotes, LiveUnavailable
+from .result_browser import browse_results
 
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def result_airports(job):
+    codes = set(job["request"]["origins"])
+    for trip in job["results"]:
+        for leg in (trip["outbound"], trip["inbound"]):
+            if leg:
+                for segment in leg["segments"]:
+                    codes.update((segment["from_code"], segment["to_code"]))
+    return {code: airport_details(code) for code in sorted(codes)}
 
 
 class JobManager:
@@ -108,7 +120,7 @@ class JobManager:
     def stopped(self, job_id):
         return self.get(job_id)["status"] == "cancelling"
 
-    def run(self, job_id):  # noqa: PLR0912 - explicit cancellable task lifecycle
+    def run(self, job_id):  # noqa: PLR0912, PLR0915 - explicit cancellable task lifecycle
         job = self.get(job_id)
         request = FlexibleRequest(**job["request"])
         try:
@@ -117,7 +129,9 @@ class JobManager:
                     job["status"] = "cancelled"
                     break
                 out, back, destination, origin = task
-                job["current"] = f"{origin} → {destination} · {out} / {back}"
+                job["current"] = f"{origin} → {destination} · {out}" + (
+                    f" / {back}" if back else ""
+                )
                 self._progress(job)
                 if self.stopped(job_id):
                     job["status"] = "cancelled"
@@ -128,21 +142,22 @@ class JobManager:
                 outbound = [
                     q for q in found["quotes"] if matches(q, request, origin, destination, out)
                 ]
-                outbound = [q for q in outbound if q["price"] < request.budget]
+                outbound = [q for q in outbound if q["price"] <= request.budget]
+                if request.trip_type == "one_way":
+                    for quote in outbound:
+                        trip = single_trip(quote, request)
+                        job["results"][trip["id"]] = trip
                 if outbound:
-                    homes = request.origins if request.return_airport == "group" else (origin,)
-                    for home in homes:
+                    for away, home in return_routes(request, origin, destination):
                         if self.stopped(job_id):
                             break
-                        found_back = self.live.search(
-                            destination, home, back, request, inbound=True
-                        )
+                        found_back = self.live.search(away, home, back, request, inbound=True)
                         job["unverified"] += found_back["unverified"]
                         job["empty_searches"] += int(found_back["empty"])
                         inbound = [
                             q
                             for q in found_back["quotes"]
-                            if matches(q, request, destination, home, back, inbound=True)
+                            if matches(q, request, away, home, back, inbound=True)
                         ]
                         for a in outbound:
                             for b in inbound:
@@ -183,7 +198,7 @@ class JobManager:
             job["rechecks"] = stored.get("rechecks", {})
             self.save(job)
 
-    def public(self, job_id, sort="price", offset=0):
+    def public(self, job_id, sort="price", offset=0, filters=None, focus=""):
         job = self.get(job_id)
         if job["status"] in ("running", "cancelling") and not (
             self._active_job_id == job_id and self._worker and self._worker.is_alive()
@@ -197,18 +212,12 @@ class JobManager:
             else:
                 results.pop(result_id, None)
         all_results = list(results.values())
-        if sort == "useful":
-            all_results.sort(key=lambda x: (-x["useful_minutes"], x["price"]))
-        else:
-            all_results.sort(key=lambda x: (x["price"], -x["useful_minutes"]))
         now = datetime.now(timezone.utc)
         for item in all_results:
             age = (now - datetime.fromisoformat(item["checked_at"])).total_seconds()
             item["needs_recheck"] = age > QUOTE_TTL
-        job["result_count"] = len(all_results)
-        job["results"] = all_results[offset : offset + 50]
-        job["offset"] = offset
-        job["has_more"] = offset + 50 < len(all_results)
+        job["airports"] = result_airports({**job, "results": all_results})
+        job.update(browse_results(all_results, sort, offset, filters, focus))
         job["plan"] = {k: v for k, v in job["plan"].items() if k != "tasks"}
         return job
 
@@ -222,6 +231,8 @@ class JobManager:
         selected = []
         for key in ("outbound", "inbound"):
             quote = pair[key]
+            if quote is None:
+                continue
             origin = quote["segments"][0]["from_code"]
             destination = quote["segments"][-1]["to_code"]
             day = quote["segments"][0]["departure"][:10]
@@ -248,7 +259,11 @@ class JobManager:
                     },
                 )
             selected.append(match)
-        updated = combine(*selected, request)
+        updated = (
+            single_trip(selected[0], request)
+            if request.trip_type == "one_way"
+            else combine(*selected, request)
+        )
         if updated is None:
             return self._store_recheck(
                 job_id,

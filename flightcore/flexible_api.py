@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, render_template, request
+import json
 
-from . import routes
+from flask import Blueprint, jsonify, redirect, render_template, request
+
+from . import airports, routes
 from .flexible import FlexibleRequest, SearchValidationError, build_plan, integer
 from .flexible_jobs import JobManager
 from .live_quotes import LiveUnavailable, request_interval
+from .result_browser import ResultFilters
 
 blueprint = Blueprint("flexible", __name__)
 manager = JobManager()
@@ -15,19 +18,38 @@ manager = JobManager()
 
 def plan_request():
     spec = FlexibleRequest.parse(request.get_json(silent=True))
-    route_map = (
-        {}
-        if spec.destinations
-        else {origin: routes.destinations(origin) for origin in spec.origins}
-    )
+    route_map = candidate_routes(spec)
     plan = build_plan(spec, route_map)
     return spec, plan
 
 
+def candidate_routes(spec):
+    if spec.destinations:
+        return {}
+    if spec.destination_set != "real":
+        return {origin: airports.destination_set(spec.destination_set) for origin in spec.origins}
+    route_map = {origin: routes.destinations(origin) for origin in spec.origins}
+    if not any(route_map.values()):
+        # Seed pool for origins without a route catalog: every candidate needs
+        # a live search; this does not imply a connection from that origin.
+        snapshot = json.loads(routes.SNAPSHOT.read_text())
+        route_map = {
+            "catalogo_generale": sorted(
+                {code for codes in snapshot.values() if isinstance(codes, list) for code in codes}
+            )
+        }
+    return route_map
+
+
 @blueprint.route("/")
-@blueprint.route("/weekends")
 def page():
-    return render_template("weekends.html")
+    return render_template("weekends.html", destination_sets=airports.DESTINATION_SETS)
+
+
+@blueprint.route("/weekends")
+@blueprint.route("/classic")
+def old_page():
+    return redirect("/", code=302)
 
 
 @blueprint.errorhandler(SearchValidationError)
@@ -41,16 +63,16 @@ def missing(_exc):
 
 
 @blueprint.route("/api/flexible/plan", methods=["POST"])
+@blueprint.route("/api/search/plan", methods=["POST"])
 def preview():
     spec, plan = plan_request()
     visible = {k: v for k, v in plan.items() if k != "tasks"}
-    visible["estimated_minutes"] = round(
-        plan["searches_upper_bound"] * request_interval() / 60, 1
-    )
+    visible["estimated_minutes"] = round(plan["searches_upper_bound"] * request_interval() / 60, 1)
     return jsonify(request=spec.to_dict(), plan=visible)
 
 
 @blueprint.route("/api/flexible/jobs", methods=["POST"])
+@blueprint.route("/api/search/jobs", methods=["POST"])
 def create():
     spec, plan = plan_request()
     try:
@@ -61,18 +83,29 @@ def create():
 
 
 @blueprint.route("/api/flexible/jobs/<job_id>")
+@blueprint.route("/api/search/jobs/<job_id>")
 def status(job_id):
     offset = integer(request.args.get("offset", 0), "pagina", 0, 10000000)
-    return jsonify(manager.public(job_id, request.args.get("sort", "price"), offset))
+    return jsonify(
+        manager.public(
+            job_id,
+            request.args.get("sort", "price"),
+            offset,
+            ResultFilters.parse(request.args),
+            request.args.get("focus", ""),
+        )
+    )
 
 
 @blueprint.route("/api/flexible/jobs/<job_id>/cancel", methods=["POST"])
+@blueprint.route("/api/search/jobs/<job_id>/cancel", methods=["POST"])
 def cancel(job_id):
     manager.cancel(job_id)
     return jsonify(success=True)
 
 
 @blueprint.route("/api/flexible/jobs/<job_id>/resume", methods=["POST"])
+@blueprint.route("/api/search/jobs/<job_id>/resume", methods=["POST"])
 def resume(job_id):
     try:
         manager.resume(job_id)
@@ -82,6 +115,7 @@ def resume(job_id):
 
 
 @blueprint.route("/api/flexible/jobs/<job_id>/results/<result_id>/recheck", methods=["POST"])
+@blueprint.route("/api/search/jobs/<job_id>/results/<result_id>/recheck", methods=["POST"])
 def recheck(job_id, result_id):
     try:
         return jsonify(manager.recheck(job_id, result_id))

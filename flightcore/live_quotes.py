@@ -73,6 +73,10 @@ class LiveQuotes:
             request.allow_self_transfer,
             request.baggage,
             request.currency,
+            request.infants,
+            request.seat,
+            tuple(request.airlines),
+            request.exclude_basic_economy,
         )
         with self._lock:
             hit = self._cache.get(key)
@@ -91,9 +95,13 @@ class LiveQuotes:
                     to_airport=destination,
                     earliest_departure_hour=int(lo[:2]),
                     latest_departure_hour=upper_hour if upper_hour < HOURS_PER_DAY else None,
+                    airlines=list(request.airlines) or None,
                 )
             ],
-            passengers=Passengers(adults=request.adults, children=request.children),
+            passengers=Passengers(
+                adults=request.adults, children=request.children, infants_on_lap=request.infants
+            ),
+            seat=request.seat,
             trip="one-way",
             currency=request.currency,
             language="it",
@@ -101,6 +109,7 @@ class LiveQuotes:
             carry_on_bags=(request.adults + request.children) if request.baggage == "cabin" else 0,
             checked_bags=(request.adults + request.children) if request.baggage == "checked" else 0,
             hide_separate_and_self_transfer=not request.allow_self_transfer,
+            exclude_basic_economy=request.exclude_basic_economy,
         )
         html = self._fetch(query)
         quotes, rejected = decode(html, request, query.url(), expected_route=(origin, destination))
@@ -296,7 +305,8 @@ def decode(html, request, url, *, expected_route=None):  # noqa: PLR0912 - valid
                 "airline_verified": False,
                 "baggage": request.baggage,
                 "baggage_basis": "google_search_filter",
-                "travelers": request.adults + request.children,
+                "travelers": request.adults + request.children + request.infants,
+                "seat": request.seat,
                 "booking_url": url,
             }
             key = fingerprint(quote)
