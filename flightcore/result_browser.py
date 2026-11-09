@@ -6,6 +6,7 @@ import math
 import re
 from dataclasses import dataclass
 
+from .airports import details as airport_details
 from .flexible import SearchValidationError
 
 PAGE_SIZE = 50
@@ -33,6 +34,10 @@ def code(value, length):
     return value
 
 
+def codes(value):
+    return tuple(code(c.strip(), 3) for c in (value or "").split(",") if c.strip())
+
+
 @dataclass(frozen=True)
 class ResultFilters:
     max_price: float | None = None
@@ -48,14 +53,13 @@ class ResultFilters:
         home_before = args.get("home_before", "")
         if home_before and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", home_before):
             raise SearchValidationError("Orario di rientro non valido.")
-        excluded = tuple(
-            code(c.strip(), 3) for c in args.get("exclude", "").split(",") if c.strip()
-        )
+        excluded = codes(args.get("exclude"))
         return cls(
             max_price=number(args.get("max_price"), "Prezzo massimo"),
             min_hours=number(args.get("min_hours"), "Ore minime"),
             origin=code(args.get("origin"), 3),
-            destination=code(args.get("destination"), 3),
+            # Comma-separated: a city group covers all its airports (STN,LTN).
+            destination=",".join(codes(args.get("destination"))),
             airline=code(args.get("airline"), 2),
             home_before=home_before,
             excluded=excluded,
@@ -68,7 +72,7 @@ class ResultFilters:
             self.max_price is None or trip["price"] <= self.max_price,
             not self.min_hours or (trip["useful_minutes"] or 0) >= self.min_hours * 60,
             not self.origin or out[0]["from_code"] == self.origin,
-            not self.destination or destination == self.destination,
+            not self.destination or destination in self.destination.split(","),
             destination not in self.excluded,
             not self.airline or all(s["airline_code"] == self.airline for s in segments(trip)),
         )
@@ -171,21 +175,37 @@ def recommendations(trips):
 
 
 def groups(trips):
+    """One entry per destination city: London groups STN, LTN, LGW and LHR."""
     grouped = {}
     for trip in trips:
         destination = trip["outbound"]["segments"][-1]["to_code"]
-        if destination not in grouped:
-            grouped[destination] = {
-                "destination": destination,
+        city = airport_details(destination)["city"]
+        if city not in grouped:
+            grouped[city] = {
+                "city": city,
+                "destinations": set(),
                 "count": 0,
                 "cheapest": trip,
                 "featured": summary(trip),
             }
-        group = grouped[destination]
+        group = grouped[city]
+        group["destinations"].add(destination)
         group["count"] += 1
         if sort_key(trip, "price") < sort_key(group["cheapest"], "price"):
             group["cheapest"] = trip
-    return [{**group, "cheapest": summary(group["cheapest"])} for group in grouped.values()]
+    output = []
+    for group in grouped.values():
+        destinations = sorted(group["destinations"])
+        output.append(
+            {
+                **group,
+                "destinations": destinations,
+                # Ready to use as the `destination` filter of this group.
+                "destination": ",".join(destinations),
+                "cheapest": summary(group["cheapest"]),
+            }
+        )
+    return output
 
 
 def calendar_prices(trips):

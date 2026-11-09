@@ -1,0 +1,979 @@
+{
+ "_meta": {
+  "generato": "2026-10-30",
+  "fonte": "Wikidata (P238, P931)"
+ },
+ "airports": {
+  "AAL": {
+   "name": "Aeroporto di Aalborg",
+   "city": "Aalborg"
+  },
+  "ACE": {
+   "name": "Aeroporto di Lanzarote",
+   "city": "Lanzarote"
+  },
+  "ADB": {
+   "name": "Aeroporto Adnan Menderes",
+   "city": "Smirne"
+  },
+  "AGA": {
+   "name": "Aeroporto di Agadir-Al Massira",
+   "city": "Agadir"
+  },
+  "AGP": {
+   "name": "Aeroporto di Málaga",
+   "city": "Malaga"
+  },
+  "AHO": {
+   "name": "Aeroporto di Alghero-Fertilia",
+   "city": "Alghero"
+  },
+  "ALC": {
+   "name": "Aeroporto di Alicante",
+   "city": "Alicante"
+  },
+  "AMM": {
+   "name": "Aeroporto Internazionale Queen Alia",
+   "city": "Amman"
+  },
+  "AMS": {
+   "name": "Aeroporto di Amsterdam-Schiphol",
+   "city": "Amsterdam"
+  },
+  "ANR": {
+   "name": "Aeroporto di Anversa-Deurne",
+   "city": "Anversa"
+  },
+  "ARN": {
+   "name": "Aeroporto di Stoccolma-Arlanda",
+   "city": "Stoccolma"
+  },
+  "ATH": {
+   "name": "Aeroporto Internazionale di Atene",
+   "city": "Atene"
+  },
+  "ATL": {
+   "name": "Aeroporto Internazionale di Atlanta-Hartsfield-Jackson",
+   "city": "Atlanta"
+  },
+  "ATQ": {
+   "city": "Amritsar"
+  },
+  "AUH": {
+   "name": "Aeroporto Internazionale di Abu Dhabi",
+   "city": "Abu Dhabi"
+  },
+  "AYT": {
+   "name": "Aeroporto di Adalia",
+   "city": "Antalya"
+  },
+  "BBU": {
+   "name": "Aeroporto di Bucarest-Aurel Vlaicu",
+   "city": "Bucarest"
+  },
+  "BCM": {
+   "name": "Aeroporto di Bacău",
+   "city": "Bacău"
+  },
+  "BCN": {
+   "name": "Aeroporto di Barcellona",
+   "city": "Barcellona"
+  },
+  "BDS": {
+   "name": "Aeroporto di Brindisi-Papola Casale",
+   "city": "Brindisi"
+  },
+  "BEG": {
+   "name": "Aeroporto di Belgrado-Nikola Tesla",
+   "city": "Belgrado"
+  },
+  "BEM": {
+   "name": "Aeroporto di Béni Mellal",
+   "city": "Béni Mellal"
+  },
+  "BER": {
+   "name": "Aeroporto di Berlino-Brandeburgo",
+   "city": "Berlino"
+  },
+  "BFS": {
+   "name": "Aeroporto Internazionale di Belfast",
+   "city": "Belfast"
+  },
+  "BGO": {
+   "name": "Aeroporto di Bergen-Flesland",
+   "city": "Bergen"
+  },
+  "BGY": {
+   "name": "Aeroporto di Bergamo-Orio al Serio",
+   "city": "Bergamo"
+  },
+  "BHD": {
+   "name": "Aeroporto di Belfast-City",
+   "city": "Belfast"
+  },
+  "BHX": {
+   "name": "Aeroporto di Birmingham",
+   "city": "Birmingham"
+  },
+  "BIO": {
+   "name": "Aeroporto di Bilbao",
+   "city": "Bilbao"
+  },
+  "BIQ": {
+   "name": "Aeroporto di Biarritz Bayonne Anglet",
+   "city": "Biarritz"
+  },
+  "BKK": {
+   "name": "Aeroporto di Bangkok-Suvarnabhumi",
+   "city": "Bangkok"
+  },
+  "BLL": {
+   "name": "Aeroporto di Billund",
+   "city": "Billund"
+  },
+  "BLQ": {
+   "name": "Aeroporto di Bologna",
+   "city": "Bologna"
+  },
+  "BMA": {
+   "name": "Aeroporto di Stoccolma-Bromma",
+   "city": "Stoccolma"
+  },
+  "BOD": {
+   "name": "Aeroporto di Bordeaux Mérignac",
+   "city": "Bordeaux"
+  },
+  "BOM": {
+   "name": "Aeroporto di Mumbai",
+   "city": "Mumbai"
+  },
+  "BOS": {
+   "name": "Aeroporto Internazionale Generale Edward Lawrence Logan",
+   "city": "Boston"
+  },
+  "BRI": {
+   "name": "Aeroporto di Bari-Palese",
+   "city": "Bari"
+  },
+  "BRQ": {
+   "name": "Aeroporto di Brno",
+   "city": "Brno"
+  },
+  "BRS": {
+   "name": "Aeroporto di Bristol",
+   "city": "Bristol"
+  },
+  "BRU": {
+   "name": "Aeroporto di Bruxelles-National",
+   "city": "Bruxelles"
+  },
+  "BSL": {
+   "name": "Aeroporto di Basilea-Mulhouse-Friburgo",
+   "city": "Basilea"
+  },
+  "BUD": {
+   "name": "Aeroporto di Budapest-Ferihegy",
+   "city": "Budapest"
+  },
+  "BVA": {
+   "name": "Aeroporto di Parigi Beauvais",
+   "city": "Parigi"
+  },
+  "BVC": {
+   "name": "Aeroporto Internazionale di Boa Vista Aristides-Pereira",
+   "city": "Boa Vista"
+  },
+  "BWK": {
+   "name": "Aeroporto di Brač",
+   "city": "Brač"
+  },
+  "CAG": {
+   "name": "Aeroporto di Cagliari-Elmas",
+   "city": "Cagliari"
+  },
+  "CAI": {
+   "name": "Aeroporto Internazionale del Cairo",
+   "city": "Il Cairo"
+  },
+  "CDG": {
+   "name": "Parigi Charles de Gaulle",
+   "city": "Parigi"
+  },
+  "CDT": {
+   "name": "Aeroporto di Castellón-Costa Azahar",
+   "city": "Castellón de la Plana"
+  },
+  "CFU": {
+   "name": "Aeroporto di Corfù-Giovanni Capodistria",
+   "city": "Corfù"
+  },
+  "CGN": {
+   "name": "Aeroporto di Colonia/Bonn",
+   "city": "Colonia"
+  },
+  "CHQ": {
+   "name": "Aeroporto di Chania-Souda",
+   "city": "Chania"
+  },
+  "CIA": {
+   "name": "Aeroporto di Roma-Ciampino",
+   "city": "Roma"
+  },
+  "CIY": {
+   "name": "Aeroporto di Comiso",
+   "city": "Comiso"
+  },
+  "CLJ": {
+   "name": "Aeroporto di Cluj-Napoca-Someșeni",
+   "city": "Cluj-Napoca"
+  },
+  "CMN": {
+   "name": "Aeroporto di Casablanca-Muhammad V",
+   "city": "Casablanca"
+  },
+  "CPH": {
+   "name": "Aeroporto di Copenaghen",
+   "city": "Copenaghen"
+  },
+  "CRA": {
+   "name": "Aeroporto di Craiova",
+   "city": "Craiova"
+  },
+  "CRL": {
+   "name": "Aeroporto di Charleroi-Bruxelles Sud",
+   "city": "Bruxelles"
+  },
+  "CRV": {
+   "name": "Aeroporto di Crotone",
+   "city": "Crotone"
+  },
+  "CTA": {
+   "name": "Aeroporto di Catania-Fontanarossa",
+   "city": "Catania"
+  },
+  "CUN": {
+   "name": "Aeroporto Internazionale di Cancún",
+   "city": "Cancún"
+  },
+  "DBV": {
+   "name": "Aeroporto di Ragusa",
+   "city": "Dubrovnik"
+  },
+  "DEL": {
+   "name": "Aeroporto Internazionale Indira Gandhi",
+   "city": "Delhi"
+  },
+  "DFW": {
+   "name": "Aeroporto Internazionale di Dallas - Fort Worth",
+   "city": "Dallas"
+  },
+  "DOH": {
+   "name": "Nuovo Aeroporto Internazionale di Doha",
+   "city": "Doha"
+  },
+  "DSS": {
+   "name": "Aeroporto di Dakar-Blaise Diagne",
+   "city": "Dakar"
+  },
+  "DUB": {
+   "name": "Aeroporto di Dublino",
+   "city": "Dublino"
+  },
+  "DUS": {
+   "name": "Aeroporto di Düsseldorf",
+   "city": "Düsseldorf"
+  },
+  "DXB": {
+   "name": "Aeroporto Internazionale di Dubai",
+   "city": "Dubai"
+  },
+  "EDI": {
+   "name": "Aeroporto di Edimburgo",
+   "city": "Edimburgo"
+  },
+  "EFL": {
+   "name": "Aeroporto Internazionale di Cefalonia",
+   "city": "Cefalonia"
+  },
+  "EIN": {
+   "name": "Aeroporto di Eindhoven",
+   "city": "Eindhoven"
+  },
+  "EMA": {
+   "name": "Aeroporto di East Midlands",
+   "city": "East Midlands"
+  },
+  "EVE": {
+   "name": "Aeroporto di Narvik/Harstad",
+   "city": "Narvik"
+  },
+  "EVN": {
+   "name": "Aeroporto di Erevan",
+   "city": "Erevan"
+  },
+  "EWR": {
+   "name": "Aeroporto Internazionale di Newark-Liberty",
+   "city": "New York"
+  },
+  "EZE": {
+   "name": "Aeroporto di Buenos Aires-Ministro Pistarini",
+   "city": "Buenos Aires"
+  },
+  "FAO": {
+   "name": "Aeroporto di Faro",
+   "city": "Faro"
+  },
+  "FCO": {
+   "name": "Aeroporto di Roma-Fiumicino",
+   "city": "Roma"
+  },
+  "FEZ": {
+   "name": "Aeroporto di Fès-Saïss",
+   "city": "Fès"
+  },
+  "FLR": {
+   "name": "Aeroporto di Firenze-Peretola",
+   "city": "Firenze"
+  },
+  "FOG": {
+   "name": "Aeroporto di Foggia",
+   "city": "Foggia"
+  },
+  "FRA": {
+   "name": "Aeroporto di Francoforte sul Meno",
+   "city": "Francoforte sul Meno"
+  },
+  "FUE": {
+   "name": "Aeroporto di Fuerteventura",
+   "city": "Fuerteventura"
+  },
+  "GDN": {
+   "name": "Aeroporto di Danzica-Lech Wałęsa",
+   "city": "Danzica"
+  },
+  "GLA": {
+   "name": "Aeroporto Internazionale di Glasgow",
+   "city": "Glasgow"
+  },
+  "GOA": {
+   "name": "Aeroporto di Genova-Sestri",
+   "city": "Genova"
+  },
+  "GRU": {
+   "name": "Aeroporto Internazionale di San Paolo-Guarulhos",
+   "city": "San Paolo"
+  },
+  "GVA": {
+   "name": "Aeroporto Internazionale di Ginevra",
+   "city": "Ginevra"
+  },
+  "HAM": {
+   "name": "Aeroporto di Amburgo-Fuhlsbüttel",
+   "city": "Amburgo"
+  },
+  "HAV": {
+   "name": "Aeroporto Internazionale José Martí",
+   "city": "L'Avana"
+  },
+  "HEL": {
+   "name": "Aeroporto di Helsinki-Vantaa",
+   "city": "Helsinki"
+  },
+  "HER": {
+   "name": "Aeroporto Internazionale di Heraklion",
+   "city": "Heraklion"
+  },
+  "HKG": {
+   "name": "Aeroporto Internazionale di Hong Kong",
+   "city": "Hong Kong"
+  },
+  "HND": {
+   "name": "Aeroporto Internazionale di Tokyo",
+   "city": "Tokyo"
+  },
+  "HRG": {
+   "name": "Aeroporto Internazionale di Hurghada",
+   "city": "Hurghada"
+  },
+  "IAD": {
+   "name": "Washington-Dulles",
+   "city": "Washington"
+  },
+  "IAS": {
+   "name": "Aeroporto Internazionale di Iași",
+   "city": "Iași"
+  },
+  "IBZ": {
+   "name": "Aeroporto di Ibiza",
+   "city": "Ibiza"
+  },
+  "ICN": {
+   "name": "Aeroporto Internazionale Incheon",
+   "city": "Seul"
+  },
+  "IST": {
+   "name": "Aeroporto di Istanbul",
+   "city": "Istanbul"
+  },
+  "JED": {
+   "name": "Aeroporto Internazionale di Gedda-Re Abd al-Aziz",
+   "city": "Gedda"
+  },
+  "JFK": {
+   "name": "Aeroporto Internazionale John F. Kennedy",
+   "city": "New York"
+  },
+  "JMK": {
+   "name": "Aeroporto di Mykonos",
+   "city": "Mykonos"
+  },
+  "JNB": {
+   "name": "Aeroporto Internazionale OR Tambo",
+   "city": "Johannesburg"
+  },
+  "JSI": {
+   "name": "Aeroporto di Skiathos",
+   "city": "Skiathos"
+  },
+  "JTR": {
+   "name": "Aeroporto nazionale di Santorini",
+   "city": "Santorini"
+  },
+  "KEF": {
+   "name": "Aeroporto Internazionale di Keflavík",
+   "city": "Keflavík"
+  },
+  "KGS": {
+   "name": "Aeroporto di Kos",
+   "city": "Kos"
+  },
+  "KLX": {
+   "city": "Calamata"
+  },
+  "KRK": {
+   "name": "Aeroporto Internazionale di Cracovia-Balice-Giovanni Paolo II",
+   "city": "Cracovia"
+  },
+  "KTW": {
+   "name": "Aeroporto di Katowice-Pyrzowice",
+   "city": "Katowice"
+  },
+  "KUN": {
+   "name": "Aeroporto di Kaunas",
+   "city": "Kaunas"
+  },
+  "KUT": {
+   "name": "Aeroporto internazionale di Kutaisi",
+   "city": "Kutaisi"
+  },
+  "KWI": {
+   "name": "Aeroporto Internazionale del Kuwait",
+   "city": "Kuwait"
+  },
+  "LAX": {
+   "name": "Aeroporto Internazionale di Los Angeles",
+   "city": "Los Angeles"
+  },
+  "LBA": {
+   "name": "Aeroporto di Leeds-Bradford",
+   "city": "Leeds"
+  },
+  "LCA": {
+   "name": "Aeroporto Internazionale di Larnaca",
+   "city": "Larnaca"
+  },
+  "LCJ": {
+   "name": "Aeroporto di Łódź Władysław Reymont",
+   "city": "Łódź"
+  },
+  "LDE": {
+   "name": "Aeroporto di Tarbes-Lourdes-Pyrénées",
+   "city": "Tarbes"
+  },
+  "LGA": {
+   "name": "Aeroporto Fiorello LaGuardia",
+   "city": "New York"
+  },
+  "LGW": {
+   "name": "Aeroporto di Londra-Gatwick",
+   "city": "Londra"
+  },
+  "LHR": {
+   "name": "Aeroporto di Londra-Heathrow",
+   "city": "Londra"
+  },
+  "LIN": {
+   "name": "Aeroporto di Milano-Linate",
+   "city": "Milano"
+  },
+  "LIS": {
+   "name": "Aeroporto di Lisbona Humberto Delgado",
+   "city": "Lisbona"
+  },
+  "LMP": {
+   "name": "Aeroporto di Lampedusa",
+   "city": "Lampedusa"
+  },
+  "LPA": {
+   "name": "Aeroporto di Gran Canaria",
+   "city": "Gran Canaria"
+  },
+  "LPL": {
+   "name": "Aeroporto di Liverpool-John Lennon",
+   "city": "Liverpool"
+  },
+  "LRM": {
+   "name": "Aeroporto Internazionale di La Romana",
+   "city": "La Romana"
+  },
+  "LTN": {
+   "name": "Aeroporto di Londra-Luton",
+   "city": "Londra"
+  },
+  "LUX": {
+   "name": "Aeroporto di Lussemburgo",
+   "city": "Lussemburgo"
+  },
+  "LUZ": {
+   "name": "Aeroporto di Lublino",
+   "city": "Lublino"
+  },
+  "LXR": {
+   "name": "Aeroporto internazionale di Luxor",
+   "city": "Luxor"
+  },
+  "LXS": {
+   "city": "Lemno"
+  },
+  "LYS": {
+   "name": "Aeroporto di Lione Saint Exupéry",
+   "city": "Lione"
+  },
+  "MAD": {
+   "name": "Aeroporto di Adolfo Suárez Madrid-Barajas",
+   "city": "Madrid"
+  },
+  "MAH": {
+   "name": "Aeroporto di Minorca",
+   "city": "Minorca"
+  },
+  "MAN": {
+   "name": "Aeroporto di Manchester",
+   "city": "Manchester"
+  },
+  "MBA": {
+   "name": "Aeroporto Internazionale Moi",
+   "city": "Mombasa"
+  },
+  "MBJ": {
+   "name": "Aeroporto di Montego",
+   "city": "Montego Bay"
+  },
+  "MEX": {
+   "name": "Aeroporto Internazionale di Città del Messico",
+   "city": "Città del Messico"
+  },
+  "MIA": {
+   "name": "Aeroporto Internazionale di Miami",
+   "city": "Miami"
+  },
+  "MIR": {
+   "name": "Aeroporto di Monastir",
+   "city": "Monastir"
+  },
+  "MLA": {
+   "name": "Aeroporto internazionale di Malta",
+   "city": "Malta"
+  },
+  "MLE": {
+   "name": "Aeroporto Internazionale Velana",
+   "city": "Male"
+  },
+  "MRS": {
+   "name": "Aeroporto di Marsiglia Provenza",
+   "city": "Marsiglia"
+  },
+  "MUC": {
+   "name": "Aeroporto di Monaco di Baviera",
+   "city": "Monaco di Baviera"
+  },
+  "MUH": {
+   "name": "Aeroporto di Marsa Matruh",
+   "city": "Marsa Matruh"
+  },
+  "MXP": {
+   "name": "Aeroporto di Milano-Malpensa",
+   "city": "Milano"
+  },
+  "NAP": {
+   "name": "Aeroporto di Napoli-Capodichino",
+   "city": "Napoli"
+  },
+  "NBE": {
+   "name": "Aeroporto di Enfidha",
+   "city": "Enfida"
+  },
+  "NCE": {
+   "name": "Aeroporto di Nizza Costa Azzurra",
+   "city": "Nizza"
+  },
+  "NCL": {
+   "name": "Aeroporto di Newcastle upon Tyne",
+   "city": "Newcastle"
+  },
+  "NOC": {
+   "name": "Ireland West Airport Knock",
+   "city": "Knock"
+  },
+  "NRN": {
+   "name": "Aeroporto Niederrhein",
+   "city": "Düsseldorf Weeze"
+  },
+  "NRT": {
+   "name": "Aeroporto di Narita",
+   "city": "Tokyo"
+  },
+  "NTE": {
+   "name": "Aeroporto di Nantes Atlantique",
+   "city": "Nantes"
+  },
+  "OLB": {
+   "name": "Aeroporto di Olbia-Costa Smeralda",
+   "city": "Olbia"
+  },
+  "OMO": {
+   "name": "Aeroporto internazionale di Mostar",
+   "city": "Mostar"
+  },
+  "OMR": {
+   "name": "Aeroporto di Oradea",
+   "city": "Oradea"
+  },
+  "OPO": {
+   "name": "Aeroporto Francisco de Sá Carneiro",
+   "city": "Porto"
+  },
+  "ORD": {
+   "name": "Aeroporto Internazionale di Chicago-O'Hare",
+   "city": "Chicago"
+  },
+  "ORK": {
+   "name": "Aeroporto di Cork",
+   "city": "Cork"
+  },
+  "ORY": {
+   "name": "Aeroporto di Parigi Orly",
+   "city": "Parigi"
+  },
+  "OSL": {
+   "name": "Aeroporto di Oslo-Gardermoen",
+   "city": "Oslo"
+  },
+  "OTP": {
+   "name": "Aeroporto di Bucarest-Henri Coandă",
+   "city": "Bucarest"
+  },
+  "OVD": {
+   "name": "Aeroporto delle Asturie",
+   "city": "Oviedo"
+  },
+  "PEK": {
+   "name": "Aeroporto di Pechino-Capitale",
+   "city": "Pechino"
+  },
+  "PFO": {
+   "name": "Aeroporto Internazionale di Pafo",
+   "city": "Pafo"
+  },
+  "PHL": {
+   "name": "Aeroporto Internazionale di Filadelfia",
+   "city": "Filadelfia"
+  },
+  "PMI": {
+   "name": "Aeroporto di Palma di Maiorca",
+   "city": "Palma di Maiorca"
+  },
+  "PMO": {
+   "name": "Aeroporto di Palermo-Punta Raisi",
+   "city": "Palermo"
+  },
+  "PNL": {
+   "name": "Aeroporto di Pantelleria",
+   "city": "Pantelleria"
+  },
+  "POZ": {
+   "name": "Aeroporto di Poznań-Ławica Henryk Wieniawski",
+   "city": "Poznań"
+  },
+  "PRG": {
+   "name": "Aeroporto di Praga-Ruzyně",
+   "city": "Praga"
+  },
+  "PSA": {
+   "name": "Aeroporto Internazionale di Pisa 'Galileo Galilei'",
+   "city": "Pisa"
+  },
+  "PUJ": {
+   "name": "Aeroporto Internazionale di Punta Cana",
+   "city": "Punta Cana"
+  },
+  "PVG": {
+   "name": "Aeroporto di Shanghai-Pudong",
+   "city": "Shanghai"
+  },
+  "PVK": {
+   "name": "Aeroporto di Aktion",
+   "city": "Preveza"
+  },
+  "QSR": {
+   "name": "Aeroporto di Salerno-Pontecagnano",
+   "city": "Salerno"
+  },
+  "RAK": {
+   "name": "Aeroporto di Marrakech-Ménara",
+   "city": "Marrakech"
+  },
+  "RBA": {
+   "name": "Aeroporto di Rabat-Salé",
+   "city": "Rabat"
+  },
+  "REG": {
+   "name": "Aeroporto di Reggio Calabria",
+   "city": "Reggio Calabria"
+  },
+  "RHO": {
+   "name": "Aeroporto di Rodi-Diagoras",
+   "city": "Rodi"
+  },
+  "RIX": {
+   "name": "Aeroporto Internazionale di Riga",
+   "city": "Riga"
+  },
+  "RMF": {
+   "name": "Aeroporto Internazionale di Marsa Alam",
+   "city": "Marsa Alam"
+  },
+  "RMU": {
+   "name": "Aeroporto Internazionale della Regione di Murcia",
+   "city": "Murcia"
+  },
+  "RUH": {
+   "name": "Aeroporto Internazionale di Riyad-King Khalid",
+   "city": "Riad"
+  },
+  "RVN": {
+   "name": "Aeroporto di Rovaniemi",
+   "city": "Rovaniemi"
+  },
+  "SAW": {
+   "name": "Aeroporto Internazionale Sabiha Gökçen",
+   "city": "Istanbul"
+  },
+  "SCV": {
+   "city": "Suceava"
+  },
+  "SDR": {
+   "name": "Aeroporto di Santander",
+   "city": "Santander"
+  },
+  "SFO": {
+   "name": "Aeroporto Internazionale di San Francisco",
+   "city": "San Francisco"
+  },
+  "SID": {
+   "name": "Aeroporto Internazionale Amílcar Cabral",
+   "city": "Sal"
+  },
+  "SIN": {
+   "name": "Aeroporto di Singapore-Changi",
+   "city": "Singapore"
+  },
+  "SJJ": {
+   "name": "Aeroporto internazionale di Sarajevo",
+   "city": "Sarajevo"
+  },
+  "SKG": {
+   "name": "Aeroporto Internazionale di Salonicco-Macedonia",
+   "city": "Salonicco"
+  },
+  "SKP": {
+   "name": "Aeroporto di Skopje",
+   "city": "Skopje"
+  },
+  "SOF": {
+   "name": "Aeroporto di Sofia",
+   "city": "Sofia"
+  },
+  "SPU": {
+   "name": "Aeroporto di Spalato",
+   "city": "Spalato"
+  },
+  "SSH": {
+   "name": "Aeroporto Internazionale di Sharm el-Sheikh",
+   "city": "Sharm el-Sheikh"
+  },
+  "STN": {
+   "name": "Aeroporto di Londra Stansted",
+   "city": "Londra"
+  },
+  "STR": {
+   "name": "Aeroporto di Stoccarda",
+   "city": "Stoccarda"
+  },
+  "SUF": {
+   "name": "Aeroporto di Lamezia Terme",
+   "city": "Lamezia Terme"
+  },
+  "SVG": {
+   "name": "Aeroporto di Stavanger-Sola",
+   "city": "Stavanger"
+  },
+  "SVQ": {
+   "name": "Aeroporto di Siviglia",
+   "city": "Siviglia"
+  },
+  "SYD": {
+   "name": "Aeroporto Internazionale Kingsford Smith",
+   "city": "Sydney"
+  },
+  "TBS": {
+   "name": "Aeroporto di Tbilisi",
+   "city": "Tbilisi"
+  },
+  "TFN": {
+   "name": "Aeroporto di Tenerife-Nord",
+   "city": "Tenerife"
+  },
+  "TFS": {
+   "name": "Aeroporto di Tenerife-Sud",
+   "city": "Tenerife"
+  },
+  "TGM": {
+   "name": "Aeroporto di Târgu Mureș",
+   "city": "Târgu Mureș"
+  },
+  "TIA": {
+   "name": "Aeroporto di Tirana",
+   "city": "Tirana"
+  },
+  "TLL": {
+   "name": "Aeroporto di Tallinn",
+   "city": "Tallinn"
+  },
+  "TLS": {
+   "name": "Tolosa-Blagnac",
+   "city": "Tolosa"
+  },
+  "TLV": {
+   "name": "Aeroporto di Tel Aviv-D. Ben Gurion",
+   "city": "Tel Aviv"
+  },
+  "TNG": {
+   "name": "Aeroporto di Tangeri-Ibn Battuta",
+   "city": "Tangeri"
+  },
+  "TOS": {
+   "name": "Aeroporto di Tromsø",
+   "city": "Tromsø"
+  },
+  "TPS": {
+   "name": "Aeroporto di Trapani-Birgi",
+   "city": "Trapani"
+  },
+  "TRF": {
+   "name": "Aeroporto di Sandefjord-Torp",
+   "city": "Sandefjord"
+  },
+  "TRN": {
+   "name": "Aeroporto di Torino-Caselle",
+   "city": "Torino"
+  },
+  "TRS": {
+   "name": "Aeroporto di Trieste-Ronchi dei Legionari",
+   "city": "Trieste"
+  },
+  "TSF": {
+   "name": "Aeroporto di Treviso-Sant'Angelo",
+   "city": "Treviso"
+  },
+  "TSR": {
+   "name": "Aeroporto di Timișoara-Giarmata",
+   "city": "Timișoara"
+  },
+  "TUN": {
+   "name": "Aeroporto Internazionale di Tunisi-Cartagine",
+   "city": "Tunisi"
+  },
+  "VAR": {
+   "name": "Aeroporto di Varna",
+   "city": "Varna"
+  },
+  "VCE": {
+   "name": "Aeroporto di Venezia-Marco Polo",
+   "city": "Venezia"
+  },
+  "VIE": {
+   "name": "Aeroporto di Vienna - Schwechat",
+   "city": "Vienna"
+  },
+  "VIT": {
+   "name": "Aeroporto di Vitoria",
+   "city": "Vitoria"
+  },
+  "VLC": {
+   "name": "Aeroporto di Valencia",
+   "city": "Valencia"
+  },
+  "VNO": {
+   "name": "Aeroporto Internazionale di Vilnius",
+   "city": "Vilnius"
+  },
+  "VRN": {
+   "name": "Aeroporto di Verona-Villafranca",
+   "city": "Verona"
+  },
+  "WAW": {
+   "name": "Aeroporto di Varsavia-Chopin",
+   "city": "Varsavia"
+  },
+  "WMI": {
+   "name": "Aeroporto della Masovia di Varsavia-Modlin",
+   "city": "Varsavia"
+  },
+  "WRO": {
+   "name": "Aeroporto di Breslavia-Niccolò Copernico",
+   "city": "Breslavia"
+  },
+  "YUL": {
+   "name": "Aeroporto Internazionale di Montréal-Pierre Elliott Trudeau",
+   "city": "Montréal"
+  },
+  "YYZ": {
+   "name": "Aeroporto Internazionale di Toronto-Pearson",
+   "city": "Toronto"
+  },
+  "ZAD": {
+   "name": "Aeroporto di Zara-Zemonico",
+   "city": "Zara"
+  },
+  "ZAG": {
+   "name": "Aeroporto di Zagabria-Pleso",
+   "city": "Zagabria"
+  },
+  "ZAZ": {
+   "name": "Aeroporto di Saragozza",
+   "city": "Saragozza"
+  },
+  "ZNZ": {
+   "city": "Zanzibar"
+  },
+  "ZRH": {
+   "name": "Aeroporto di Zurigo",
+   "city": "Zurigo"
+  },
+  "ZTH": {
+   "name": "Aeroporto di Zante",
+   "city": "Zante"
+  }
+ }
+}

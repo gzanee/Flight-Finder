@@ -2,93 +2,155 @@
 <html lang="it">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Flight Finder · Cerca il tuo viaggio</title>
+<title>Flight Finder · Voli economici, anche con date flessibili</title>
+<meta name="description" content="Cerca voli da più aeroporti, con date esatte o flessibili, e trova il weekend o il viaggio più conveniente.">
 <link rel="stylesheet" href="{{ url_for('static', filename='weekends.css') }}">
 <script src="{{ url_for('static', filename='weekends.js') }}" defer></script>
 </head>
 <body>
-<header><a class="brand" href="/">↗ Flight Finder</a><span class="hint">Date precise. Oppure tutte le possibilità.</span></header>
-<main>
-<section class="intro"><p class="eyebrow">IL VIAGGIO PARTE DA QUI</p><h1>Quando vuoi partire.<br>Dove ti porta il prezzo.</h1><p>Una sola ricerca per un volo, un weekend o un viaggio più lungo. Scegli aeroporti, date e tempo a disposizione.</p></section>
-<div class="layout">
-<section class="panel search-panel">
-<form id="trip-form">
-<div class="grid2"><label class="field">Viaggio<select id="trip-type"><option value="round_trip">Andata e ritorno</option><option value="one_way">Sola andata</option></select></label><label class="field">Quando vuoi volare?<select id="date-mode"><option value="flexible">Trova le date più economiche</option><option value="fixed">Ho già le date</option></select></label></div>
-<div class="presets"><span class="hint">Imposta al volo</span><button id="preset-weekend" type="button">Weekend · ven sera → dom sera</button><button id="preset-anytime" type="button">Tutti i giorni e gli orari</button></div>
-<fieldset class="airport-picker" id="origins-picker"><legend>Da dove parti?</legend><div class="airport-chips" id="origins-chips"></div><label class="field"><span class="sr-only">Aggiungi aeroporto di partenza</span><input id="origins-query" placeholder="Città o aeroporto, es. Roma, FCO" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="origins-suggestions"></label><div class="suggestions" id="origins-suggestions" role="listbox" aria-label="Aeroporti di partenza suggeriti" hidden></div><div class="quick-airports"><span class="hint">Aggiungi:</span><button type="button" data-origin="VRN">Verona</button><button type="button" data-origin="BLQ">Bologna</button><button type="button" data-origin="BGY">Bergamo</button></div></fieldset>
-<fieldset><legend>Dove vuoi andare?</legend><label class="check"><input id="anywhere" type="checkbox" checked>Ovunque · confronta le destinazioni candidate</label><label class="field" id="destination-set-field">Quali destinazioni confrontare?<select id="destination-set"><option value="real">Tutte le candidate dai cataloghi delle rotte</option>{% for key, info in destination_sets.items() %}<option value="{{ key }}">{{ info[0] }}</option>{% endfor %}</select></label><div id="destinations-picker" class="airport-picker" hidden><div class="airport-chips" id="destinations-chips"></div><label class="field"><span class="sr-only">Aggiungi aeroporto di destinazione</span><input id="destinations-query" placeholder="Città o aeroporto, es. Londra, BCN" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="destinations-suggestions"></label><div class="suggestions" id="destinations-suggestions" role="listbox" aria-label="Aeroporti di destinazione suggeriti" hidden></div><p class="hint">Aggiungi più aeroporti per confrontarli nella stessa ricerca. Puoi anche inserire codici separati da virgole.</p></div></fieldset>
-<div class="grid2"><label class="field"><span id="start-label">Parti non prima del</span><input id="start-date" type="date" required></label><label class="field" id="end-field"><span id="end-label">Rientra entro il</span><input id="end-date" type="date" required></label></div>
-<p id="period-hint" class="hint">Andata e ritorno devono rientrare nel periodo.</p>
-<div id="nights-fields"><div class="grid2"><label class="field">Soggiorno minimo (notti)<input id="min-nights" type="number" min="0" max="30" value="2" required></label><label class="field">Soggiorno massimo (notti)<input id="max-nights" type="number" min="0" max="30" value="2" required></label></div><p class="hint">Venerdì → domenica = 2 notti di calendario. 0 notti permette il ritorno in giornata.</p></div>
-<div class="journey">
-<fieldset><legend><span class="badge">↗</span> Andata</legend><div id="departure-days" class="days" aria-label="Giorni di partenza"></div><div class="grid2"><label class="field">Partenza dalle<input id="departure-min" type="time" value="18:00" required></label><label class="field">Fino alle<input id="departure-max" type="time" value="23:59" required></label></div></fieldset>
-<fieldset id="return-fields"><legend><span class="badge">↙</span> Ritorno</legend><div id="return-days" class="days" aria-label="Giorni di ritorno"></div><div class="grid2"><label class="field">Partenza dalle<input id="return-min" type="time" value="18:00" required></label><label class="field">Fino alle<input id="return-max" type="time" value="23:59" required></label></div></fieldset>
-</div>
-<div class="grid2"><label class="field"><span id="budget-label">Budget totale A/R (€)</span><input id="budget" type="number" min="1" max="100000" value="100" step="0.01" placeholder="Senza limite"><small>Totale per tutti i viaggiatori.</small></label><label class="field">Scali per tratta<select id="max-stops"><option value="0">Solo diretti</option><option value="1">Massimo 1 scalo</option><option value="2">Massimo 2 scali</option><option value="3">Massimo 3 scali</option></select></label></div>
-<details><summary>Viaggiatori, classe e bagagli</summary>
-<div class="grid3"><label class="field">Adulti<input id="adults" type="number" min="1" max="9" value="1" required></label><label class="field">Bambini con posto<input id="children" type="number" min="0" max="8" value="0" required></label><label class="field">Neonati in braccio<input id="infants" type="number" min="0" max="8" value="0" required></label></div>
-<div class="grid2"><label class="field">Classe<select id="seat"><option value="economy">Economy</option><option value="premium-economy">Premium economy</option><option value="business">Business</option><option value="first">First</option></select></label><label class="field">Bagaglio nel confronto<select id="baggage"><option value="base">Tariffa base</option><option value="cabin">Trolley per viaggiatore con posto</option><option value="checked">Stiva per viaggiatore con posto</option></select></label></div>
-<label class="check"><input id="exclude-basic-economy" type="checkbox">Escludi le tariffe Basic economy nel confronto Google</label>
-<p class="hint">Bagagli e condizioni tariffarie: peso, misure e inclusione esatta vanno confermati dal venditore.</p>
-</details>
-<details><summary>Aeroporti di ritorno e coincidenze</summary>
-<div id="return-airport-fields" class="grid2"><label class="field">Rientra a<select id="return-airport"><option value="same">Stesso aeroporto di partenza</option><option value="group">Qualsiasi aeroporto del gruppo di partenza</option></select></label><label class="field">Riparti da<select id="return-departure"><option value="same">Stesso aeroporto di arrivo</option><option value="group">Qualsiasi aeroporto del gruppo di destinazione</option></select></label></div>
-<p id="open-jaw-hint" class="hint">Per ripartire da un altro aeroporto scegli destinazioni specifiche. Il trasferimento durante il soggiorno è a carico tuo e non è incluso nel prezzo.</p>
-<label class="check"><input id="self-transfer" type="checkbox">Includi coincidenze autogestite e protezione non dichiarata</label>
-<label class="check"><input id="airport-change" type="checkbox">Consenti il cambio di aeroporto durante uno scalo</label>
-<label class="check"><input id="schengen-transfers" type="checkbox">Scali solo in aeroporti dell’area Schengen</label>
-<p class="hint">Il self-transfer riguarda le coincidenze di una tratta. Un cambio di aeroporto può richiedere un trasferimento a terra da organizzare e pagare separatamente.</p>
-<div class="grid2"><label class="field">Scalo minimo (minuti)<input id="min-layover" type="number" min="0" max="4320" step="1" value="0"></label><label class="field">Scalo massimo (minuti)<input id="max-layover" type="number" min="0" max="4320" step="1" placeholder="Senza limite"></label></div>
-</details>
-<details><summary>Arrivi, durata dei voli e compagnie</summary>
-<div class="grid2"><label class="field">Arrivo andata dalle<input id="departure-arrival-min" type="time" value="00:00"></label><label class="field">Arrivo andata entro le<input id="departure-arrival-max" type="time" value="23:59"></label></div>
-<div id="return-arrival-fields" class="grid2"><label class="field">Arrivo ritorno dalle<input id="return-arrival-min" type="time" value="00:00"></label><label class="field">Arrivo ritorno entro le<input id="return-arrival-max" type="time" value="23:59"></label></div>
-<div class="grid2"><label class="field">Durata andata minima (ore)<input id="departure-duration-min" type="number" min="0" max="72" step="0.25" value="0"></label><label class="field">Durata andata massima (ore)<input id="departure-duration-max" type="number" min="0" max="72" step="0.25" placeholder="Senza limite"></label></div>
-<div id="return-duration-fields" class="grid2"><label class="field">Durata ritorno minima (ore)<input id="return-duration-min" type="number" min="0" max="72" step="0.25" value="0"></label><label class="field">Durata ritorno massima (ore)<input id="return-duration-max" type="number" min="0" max="72" step="0.25" placeholder="Senza limite"></label></div>
-<p class="hint">La durata comprende gli scali. Gli orari sono locali agli aeroporti.</p>
-<div class="grid2"><label class="field">Compagnie<select id="airline-mode"><option value="all">Tutte</option><option value="low_cost">Solo low-cost (elenco selezionato)</option></select></label><label class="field">Solo queste compagnie (facoltativo)<input id="airlines" placeholder="Codici IATA, es. FR, V7, U2"><small>Applica la scelta a ogni volo della tratta.</small></label></div>
-<div class="grid2"><label class="field"><span id="deadline-label">Arrivo a casa nel giorno del ritorno entro le</span><input id="final-arrival" type="time"><small>Facoltativo: esclude gli arrivi nei giorni successivi.</small></label><label class="field" id="min-hours-field">Ore minime a destinazione<input id="min-hours" type="number" min="0" max="720" value="0" required></label></div>
-</details>
-<button class="primary wide" id="plan-button" type="submit">Prepara la ricerca →</button>
-</form>
+<header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">✈</span>Flight Finder</a></header>
+
+<section class="hero">
+  <div class="hero-inner">
+    <h1>Trova il volo giusto,<br>al prezzo giusto.</h1>
+    <p>Confronta tutte le compagnie, da più aeroporti insieme. Hai date flessibili? Troviamo noi i giorni più convenienti.</p>
+  </div>
 </section>
-<aside>
-<section class="panel" id="plan-panel"><p class="eyebrow">IL TUO VIAGGIO</p><h2>Le tue date.<br>Le tue possibilità.</h2><p>Confronta un giorno preciso o tutte le combinazioni di un periodo. Il preset Weekend compila venerdì sera → domenica sera.</p><div class="rule"></div><h3>Prezzi e voli verificati insieme.</h3><p>Nei risultati entrano solo voli con data, aeroporti, numero, orario e prezzo osservati su Google. Per l’A/R controlliamo anche il ritorno.</p></section>
-<section class="panel coverage"><h3>Cosa significa “Ovunque”?</h3><p>Controlliamo su Google le destinazioni candidate dai cataloghi delle rotte. Per origini senza un catalogo usiamo il bacino generale disponibile. La copertura può essere incompleta: aggiungi aeroporti specifici per cercare altre mete.</p></section>
-</aside>
-</div>
-<div id="error" class="notice error" role="alert" hidden></div>
-<section id="progress-panel" class="panel" hidden aria-live="polite"><div class="progress-header"><h2 id="status-label">Ricerca in corso</h2><div><button id="cancel" type="button">Ferma</button><button id="resume" type="button" hidden>Riprendi</button></div></div><p id="job-summary" class="hint"></p><progress id="progress" max="100" value="0"></progress><p id="progress-text"></p><p id="current" class="hint"></p><p id="issues" class="notice" hidden></p><p class="hint">Le ricerche sono graduali. In caso di interruzione conserviamo il progresso.</p></section>
-<section id="results-panel" hidden>
-  <div class="results-heading"><div><p class="eyebrow">LE TUE POSSIBILITÀ</p><h2 id="results-heading">Viaggi trovati</h2></div><label>Ordina per<select id="result-sort"><option value="price">Prezzo totale</option><option value="useful">Tempo utile a destinazione</option><option value="duration">Durata complessiva dei voli</option><option value="departure">Data e orario di partenza</option></select></label></div>
-  <p id="result-note" class="hint"></p>
-  <form id="result-filters" class="panel result-filters">
-    <div class="filter-heading"><h3>Affina i risultati</h3><button type="reset" class="text-button">Azzera filtri</button></div>
-    <p class="hint">Filtra tutti i viaggi già trovati, senza nuove ricerche su Google. Per ampliare la ricerca modifica il modulo iniziale.</p>
-    <div class="result-filter-grid">
-      <label class="field">Prezzo totale massimo (€)<input id="filter-price" type="number" min="0" step="0.01" placeholder="Tutti i prezzi"></label>
-      <label class="field" id="filter-hours-field">Tempo minimo a destinazione<select id="filter-hours"><option value="">Qualsiasi durata</option><option value="24">Almeno 24 ore</option><option value="36">Almeno 36 ore</option><option value="48">Almeno 48 ore</option><option value="60">Almeno 60 ore</option></select><small>Tra arrivo e ripartenza; eventuali trasferimenti a terra non sono sottratti.</small></label>
-      <label class="field">Parti da<select id="filter-origin"><option value="">Tutti gli aeroporti</option></select></label>
-      <label class="field">Destinazione<select id="filter-destination"><option value="">Tutte le destinazioni</option></select></label>
-      <label class="field">Compagnia su tutti i voli<select id="filter-airline"><option value="">Tutte le compagnie</option></select></label>
-      <label class="field" id="filter-home-field">Rientro entro le<input id="filter-home" type="time"><small>Nel giorno della partenza del ritorno. Esclude gli arrivi nei giorni successivi.</small></label>
+
+<main>
+<form id="trip-form" class="search-card" novalidate>
+  <div class="search-toolbar">
+    <div class="segmented" data-target="trip-type" role="group" aria-label="Tipo di viaggio"><button type="button" data-value="round_trip">Andata e ritorno</button><button type="button" data-value="one_way">Solo andata</button></div>
+    <div class="segmented" data-target="date-mode" role="group" aria-label="Date"><button type="button" data-value="fixed">Date esatte</button><button type="button" data-value="flexible">Date flessibili</button></div>
+    <select id="trip-type" hidden><option value="round_trip">Andata e ritorno</option><option value="one_way">Sola andata</option></select>
+    <select id="date-mode" hidden><option value="flexible">Date flessibili</option><option value="fixed">Date esatte</option></select>
+    <div class="presets"><button id="preset-weekend" type="button">Un weekend</button><button id="preset-anytime" type="button">Qualsiasi giorno</button></div>
+  </div>
+
+  <div class="search-main">
+    <div class="search-field airport-picker" id="origins-picker">
+      <span class="field-label">Da</span>
+      <div class="airport-chips" id="origins-chips"></div>
+      <input id="origins-query" placeholder="Aggiungi città o aeroporto" autocomplete="off" role="combobox" aria-label="Aggiungi aeroporto di partenza" aria-expanded="false" aria-autocomplete="list" aria-controls="origins-suggestions">
+      <div class="suggestions" id="origins-suggestions" role="listbox" aria-label="Aeroporti di partenza suggeriti" hidden></div>
     </div>
-    <details class="excluded-destinations"><summary>Escludi destinazioni <span id="excluded-count"></span></summary><div id="excluded-options" class="exclude-options"></div></details>
-    <p id="filter-count" class="filter-count" role="status"></p>
-    <p id="filter-error" class="notice error" role="alert" hidden></p>
-  </form>
-  <section id="recommendations-panel" aria-labelledby="recommendations-title" hidden>
-    <div class="recommendations-heading"><div><p class="eyebrow">UN PUNTO DI PARTENZA</p><h3 id="recommendations-title">Tre modi di scegliere</h3></div><span id="recommendation-scope" class="hint"></span></div>
-    <div id="recommendations" class="recommendation-grid"></div>
-    <details id="recommendation-method" class="recommendation-method"><summary>Come scegliamo il miglior compromesso</summary><p class="hint">Cerchiamo più tempo a destinazione rispetto al più economico: massimo 20 € in più oppure il 50% del suo prezzo, se maggiore, e non oltre 3 € per ogni ora guadagnata. Fra queste alternative scegliamo il costo per ora a destinazione più basso. Il confronto riguarda il totale per tutti i viaggiatori; date e destinazioni possono cambiare. I viaggi che ripartono da un altro aeroporto sono esclusi dal confronto del tempo, perché il trasferimento a terra non è calcolato.</p></details>
-  </section>
-  <details id="calendar-panel" class="panel" hidden><summary>Prezzo più basso per combinazione di date</summary><p class="hint">Minimi fra i risultati che rispettano i filtri qui sopra. Le date assenti non sono una conferma di indisponibilità.</p><div id="calendar" class="calendar-prices"></div></details>
-  <div class="result-view-bar"><div class="view-switch" role="group" aria-label="Visualizza risultati"><button id="view-destinations" type="button" aria-pressed="true">Per destinazione</button><button id="view-trips" type="button" aria-pressed="false">Tutti i voli</button></div><button id="back-destinations" class="text-button" type="button" hidden>← Tutte le destinazioni</button></div>
-  <p id="result-feedback" role="status"></p>
-  <div id="destination-groups" class="destination-groups"></div>
-  <div id="results"></div>
-  <div class="pagination" id="result-pagination"><button id="prev-page" type="button">← Precedenti</button><span id="page-label"></span><button id="next-page" type="button">Successivi →</button></div>
+    <div class="search-field" id="destination-field">
+      <div class="field-label-row"><span class="field-label">A</span><label class="switch"><input id="anywhere" type="checkbox" checked><span aria-hidden="true"></span>Ovunque</label></div>
+      <label id="destination-set-field" class="inline-select"><span class="sr-only">Che tipo di meta</span><select id="destination-set"><option value="real">Tutte le mete raggiungibili</option>{% for key, info in destination_sets.items() %}<option value="{{ key }}">{{ info[0] }}</option>{% endfor %}</select></label>
+      <div id="destinations-picker" class="airport-picker" hidden>
+        <div class="airport-chips" id="destinations-chips"></div>
+        <input id="destinations-query" placeholder="Città o aeroporto" autocomplete="off" role="combobox" aria-label="Aggiungi aeroporto di destinazione" aria-expanded="false" aria-autocomplete="list" aria-controls="destinations-suggestions">
+        <div class="suggestions" id="destinations-suggestions" role="listbox" aria-label="Aeroporti di destinazione suggeriti" hidden></div>
+      </div>
+    </div>
+    <div class="search-field dates">
+      <label><span class="field-label" id="start-label">Partenza</span><input id="start-date" type="date" required></label>
+      <label id="end-field"><span class="field-label" id="end-label">Ritorno</span><input id="end-date" type="date" required></label>
+    </div>
+    <details class="search-field travelers" id="travelers">
+      <summary><span class="field-label">Viaggiatori</span><span id="travelers-summary" class="field-value">1 adulto · Economy</span></summary>
+      <div class="popover">
+        <div class="stepper"><span>Adulti<small>12 anni e più</small></span><div><button type="button" data-step="adults" data-delta="-1" aria-label="Meno adulti">−</button><input id="adults" type="number" min="1" max="9" value="1" required aria-label="Adulti"><button type="button" data-step="adults" data-delta="1" aria-label="Più adulti">+</button></div></div>
+        <div class="stepper"><span>Bambini<small>2–11 anni, con posto</small></span><div><button type="button" data-step="children" data-delta="-1" aria-label="Meno bambini">−</button><input id="children" type="number" min="0" max="8" value="0" required aria-label="Bambini"><button type="button" data-step="children" data-delta="1" aria-label="Più bambini">+</button></div></div>
+        <div class="stepper"><span>Neonati<small>sotto i 2 anni, in braccio</small></span><div><button type="button" data-step="infants" data-delta="-1" aria-label="Meno neonati">−</button><input id="infants" type="number" min="0" max="8" value="0" required aria-label="Neonati"><button type="button" data-step="infants" data-delta="1" aria-label="Più neonati">+</button></div></div>
+        <label class="field">Classe<select id="seat"><option value="economy">Economy</option><option value="premium-economy">Premium economy</option><option value="business">Business</option><option value="first">Prima</option></select></label>
+        <label class="field">Bagaglio<select id="baggage"><option value="base">Solo bagaglio piccolo</option><option value="cabin">Con trolley in cabina</option><option value="checked">Con valigia in stiva</option></select></label>
+      </div>
+    </details>
+    <button class="search-button" id="plan-button" type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Cerca voli</button>
+  </div>
+
+  <div class="search-extras">
+    <div id="nights-fields" class="extra"><span class="extra-label">Notti</span><div class="range"><input id="min-nights" type="number" min="0" max="30" value="2" required aria-label="Notti minime"><span>–</span><input id="max-nights" type="number" min="0" max="30" value="2" required aria-label="Notti massime"></div></div>
+    <div class="extra"><span class="extra-label" id="budget-label">Budget massimo</span><div class="money-input"><input id="budget" type="number" min="1" max="100000" step="1" placeholder="Nessun limite" aria-describedby="budget-help"><span>€</span></div><small id="budget-help" class="sr-only">Totale per tutti i viaggiatori</small></div>
+    <div class="extra"><span class="extra-label">Scali</span><select id="max-stops"><option value="0">Solo diretti</option><option value="1" selected>Fino a 1 scalo</option><option value="2">Fino a 2 scali</option><option value="3">Qualsiasi</option></select></div>
+  </div>
+
+  <div class="journey">
+    <fieldset id="departure-fields"><legend>Andata</legend><div id="departure-days" class="days" aria-label="Giorni di partenza"></div><div class="time-range"><span>dalle</span><input id="departure-min" type="time" value="00:00" required aria-label="Partenza andata dalle"><span>alle</span><input id="departure-max" type="time" value="23:59" required aria-label="Partenza andata entro le"></div></fieldset>
+    <fieldset id="return-fields"><legend>Ritorno</legend><div id="return-days" class="days" aria-label="Giorni di ritorno"></div><div class="time-range"><span>dalle</span><input id="return-min" type="time" value="00:00" required aria-label="Partenza ritorno dalle"><span>alle</span><input id="return-max" type="time" value="23:59" required aria-label="Partenza ritorno entro le"></div></fieldset>
+  </div>
+  <p id="period-hint" class="form-hint"></p>
+
+  <details class="more-filters">
+    <summary>Altri filtri</summary>
+    <div class="more-grid">
+      <section><h3>Arrivi</h3>
+        <div class="pair"><label class="field">Arrivo andata dalle<input id="departure-arrival-min" type="time" value="00:00"></label><label class="field">entro le<input id="departure-arrival-max" type="time" value="23:59"></label></div>
+        <div id="return-arrival-fields" class="pair"><label class="field">Arrivo ritorno dalle<input id="return-arrival-min" type="time" value="00:00"></label><label class="field">entro le<input id="return-arrival-max" type="time" value="23:59"></label></div>
+        <label class="field"><span id="deadline-label">A casa entro le (giorno del ritorno)</span><input id="final-arrival" type="time"></label>
+        <label class="field" id="min-hours-field">Ore minime a destinazione<input id="min-hours" type="number" min="0" max="720" value="0" required></label>
+      </section>
+      <section><h3>Durata dei voli</h3>
+        <div class="pair"><label class="field">Andata da (ore)<input id="departure-duration-min" type="number" min="0" max="72" step="0.25" value="0"></label><label class="field">a (ore)<input id="departure-duration-max" type="number" min="0" max="72" step="0.25" placeholder="Nessun limite"></label></div>
+        <div id="return-duration-fields" class="pair"><label class="field">Ritorno da (ore)<input id="return-duration-min" type="number" min="0" max="72" step="0.25" value="0"></label><label class="field">a (ore)<input id="return-duration-max" type="number" min="0" max="72" step="0.25" placeholder="Nessun limite"></label></div>
+        <div class="pair"><label class="field">Scalo minimo (min)<input id="min-layover" type="number" min="0" max="4320" step="1" value="0"></label><label class="field">Scalo massimo (min)<input id="max-layover" type="number" min="0" max="4320" step="1" placeholder="Nessun limite"></label></div>
+      </section>
+      <section><h3>Compagnie e scali</h3>
+        <label class="field">Compagnie<select id="airline-mode"><option value="all">Tutte</option><option value="low_cost">Solo low cost</option></select></label>
+        <label class="field">Solo queste compagnie<input id="airlines" placeholder="Es. FR, U2, V7"></label>
+        <label class="check"><input id="exclude-basic-economy" type="checkbox">Escludi le tariffe Basic economy</label>
+        <label class="check"><input id="self-transfer" type="checkbox">Accetta scali con cambio volo a carico mio</label>
+        <label class="check"><input id="airport-change" type="checkbox">Accetta il cambio di aeroporto durante lo scalo</label>
+        <label class="check"><input id="schengen-transfers" type="checkbox">Scali solo in area Schengen</label>
+      </section>
+      <section id="return-airport-fields"><h3>Aeroporti del ritorno</h3>
+        <label class="field">Rientro a<select id="return-airport"><option value="same">Stesso aeroporto di partenza</option><option value="group">Uno qualsiasi tra quelli di partenza</option></select></label>
+        <label class="field">Ripartenza da<select id="return-departure"><option value="same">Stesso aeroporto di arrivo</option><option value="group">Uno qualsiasi tra le destinazioni scelte</option></select></label>
+        <p id="open-jaw-hint" class="form-hint">Se riparti da un altro aeroporto, il trasferimento è a carico tuo.</p>
+      </section>
+    </div>
+  </details>
+</form>
+
+<div id="error" class="notice error" role="alert" hidden></div>
+
+<section class="features" id="features">
+  <div><b>Tutte le compagnie</b><span>Low cost e voli di linea nella stessa ricerca.</span></div>
+  <div><b>Più aeroporti insieme</b><span>Venezia e Treviso? Confrontali in un colpo solo.</span></div>
+  <div><b>Date flessibili</b><span>Scegli il periodo, troviamo noi i giorni più convenienti.</span></div>
+</section>
+
+<section id="progress-panel" class="progress-card" hidden aria-live="polite">
+  <div class="progress-top"><div><h2 id="status-label">Stiamo cercando i voli</h2><p id="job-summary"></p></div><div class="progress-actions"><button id="cancel" type="button" class="ghost">Ferma</button><button id="resume" type="button" hidden>Riprendi</button></div></div>
+  <progress id="progress" max="100" value="0"></progress>
+  <p id="progress-text"></p>
+  <p id="current" class="progress-current"></p>
+  <p id="issues" class="notice" hidden></p>
+</section>
+
+<section id="results-panel" class="results-layout" hidden>
+  <aside class="filters-col">
+    <details id="filters-box" class="filters-box" open>
+      <summary>Filtra i risultati <span id="filter-count" class="filter-count" role="status"></span></summary>
+      <form id="result-filters" class="result-filters">
+        <label class="field">Prezzo massimo<div class="money-input"><input id="filter-price" type="number" min="0" step="1" placeholder="Qualsiasi"><span>€</span></div></label>
+        <label class="field" id="filter-hours-field">Tempo a destinazione<select id="filter-hours"><option value="">Qualsiasi</option><option value="24">Almeno 24 ore</option><option value="36">Almeno 36 ore</option><option value="48">Almeno 48 ore</option><option value="60">Almeno 60 ore</option></select></label>
+        <label class="field">Partenza da<select id="filter-origin"><option value="">Tutti gli aeroporti</option></select></label>
+        <label class="field">Destinazione<select id="filter-destination"><option value="">Tutte</option></select></label>
+        <label class="field">Compagnia<select id="filter-airline"><option value="">Tutte</option></select></label>
+        <label class="field" id="filter-home-field">Rientro entro le<input id="filter-home" type="time"></label>
+        <details class="excluded-destinations"><summary>Escludi destinazioni <span id="excluded-count"></span></summary><div id="excluded-options" class="exclude-options"></div></details>
+        <button type="reset" class="text-button">Azzera filtri</button>
+        <p id="filter-error" class="notice error" role="alert" hidden></p>
+      </form>
+    </details>
+  </aside>
+  <div class="results-col">
+    <div class="results-heading"><div><h2 id="results-heading">Risultati</h2><p id="result-note"></p></div><label class="sort">Ordina per<select id="result-sort"><option value="price">Prezzo più basso</option><option value="useful">Più tempo a destinazione</option><option value="duration">Voli più brevi</option><option value="departure">Partenza più vicina</option></select></label></div>
+    <section id="recommendations-panel" aria-labelledby="recommendations-title" hidden>
+      <h3 id="recommendations-title" class="sr-only">In evidenza</h3><span id="recommendation-scope" hidden></span>
+      <div id="recommendations" class="recommendation-grid"></div>
+      <details id="recommendation-method" class="recommendation-method"><summary>Come scegliamo il miglior compromesso</summary><p>Cerchiamo più tempo a destinazione rispetto al più economico, spendendo al massimo 20 € in più (o il 50% del prezzo, se maggiore) e non oltre 3 € per ogni ora guadagnata. Tra queste alternative scegliamo quella col costo per ora più basso.</p></details>
+    </section>
+    <details id="calendar-panel" class="calendar-panel" hidden><summary>Prezzi per data</summary><div id="calendar" class="calendar-prices"></div></details>
+    <div class="result-view-bar"><div class="view-switch" role="group" aria-label="Visualizza risultati"><button id="view-destinations" type="button" aria-pressed="true">Per destinazione</button><button id="view-trips" type="button" aria-pressed="false">Tutti i voli</button></div><button id="back-destinations" class="text-button" type="button" hidden>← Tutte le destinazioni</button><a id="export-pdf" class="export-pdf" href="#" download hidden>Scarica PDF</a></div>
+    <p id="result-feedback" class="result-feedback" role="status"></p>
+    <div id="destination-groups" class="destination-groups"></div>
+    <div id="results"></div>
+    <div class="pagination" id="result-pagination"><button id="prev-page" type="button">← Precedenti</button><span id="page-label"></span><button id="next-page" type="button">Successivi →</button></div>
+  </div>
 </section>
 </main>
-<footer>Flight Finder · Prezzi osservati su Google Flights. Disponibilità finale e condizioni da confermare dal venditore.</footer>
+<footer class="site-footer"><p>Flight Finder confronta i prezzi pubblicati su Google Flights. Prezzi e disponibilità possono cambiare: verifica sempre le condizioni sul sito del venditore prima di prenotare.</p></footer>
 </body></html>

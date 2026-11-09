@@ -104,8 +104,9 @@ fuori dal bacino. Non scartiamo una rotta solo perché assente da una tabella.
 Prima dell’avvio mostriamo il numero di combinazioni e un massimo di richieste.
 Una scansione su molti mesi e aeroporti può richiedere ore. Tutte le modalità
 usano lo stesso worker seriale, la stessa cache di cinque minuti e lo stesso
-intervallo: **1,5 secondi dopo ogni risposta**, configurabile fra 1 e 10 con
-`FLIGHT_FINDER_GOOGLE_INTERVAL`. Si aggiungono i tempi di risposta e gli
+intervallo: **0,3 secondi dopo ogni risposta**, configurabile fra 0,3 e 10 con
+`FLIGHT_FINDER_GOOGLE_INTERVAL`. La connessione con Google viene riusata fra
+una ricerca e l'altra. Si aggiungono i tempi di risposta e gli
 errori di rete: non è una garanzia di durata o di assenza di blocchi.
 
 Un errore di connessione viene ritentato al massimo due volte. Un 403/429

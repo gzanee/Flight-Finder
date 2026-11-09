@@ -25,9 +25,20 @@ CACHE_LIMIT = 2000
 HTTP_OK = 200
 HOURS_PER_DAY = 24
 NETWORK_RETRIES = 2
-DEFAULT_REQUEST_INTERVAL = 1.5
-MIN_REQUEST_INTERVAL = 1.0
+# Google sometimes answers 200 with an ErrorResponse (status 13, INTERNAL) for
+# a query that succeeds when repeated. Measured 2026-10-30 on one route: 6/15 at
+# 0.3 s, 3/15 at 2 s, also with a fresh client. Errors come in bursts, so back
+# off exponentially (2, 4, 8, 16, 30 s) rather than retrying within the burst.
+GOOGLE_ERROR_RETRIES = 5
+MAX_GOOGLE_ERROR_WAIT = 30
+# Measured 2026-10-20 from a residential IT IP: 300 consecutive searches at
+# 0.3 s showed no 429 and the same empty routes as at 1.5 s. Below that floor
+# nothing was tested, so it is not allowed.
+DEFAULT_REQUEST_INTERVAL = 0.3
+MIN_REQUEST_INTERVAL = 0.3
 MAX_REQUEST_INTERVAL = 10.0
+# Response time plus parsing not hidden by the interval, per search (measured).
+REQUEST_OVERHEAD = 0.2
 
 
 def request_interval():
@@ -49,12 +60,17 @@ class LiveBlocked(LiveUnavailable):
     pass
 
 
+class LiveTransient(LiveUnavailable):
+    pass
+
+
 class LiveQuotes:
     def __init__(self):
         self._cache = {}
         self._lock = threading.Lock()
         self._network_lock = threading.Lock()
         self._next_request = 0.0
+        self._client = None
         self.request_interval = request_interval()
         self.blocked_until = 0.0
 
@@ -111,8 +127,25 @@ class LiveQuotes:
             hide_separate_and_self_transfer=not request.allow_self_transfer,
             exclude_basic_economy=request.exclude_basic_economy,
         )
-        html = self._fetch(query)
-        quotes, rejected = decode(html, request, query.url(), expected_route=(origin, destination))
+        for attempt in range(GOOGLE_ERROR_RETRIES + 1):
+            html = self._fetch(query)
+            try:
+                quotes, rejected = decode(
+                    html, request, query.url(), expected_route=(origin, destination)
+                )
+                break
+            except LiveTransient:
+                if attempt == GOOGLE_ERROR_RETRIES:
+                    raise
+                logger.info(
+                    "Google error response for %s-%s %s; retry %d/%d",
+                    origin,
+                    destination,
+                    day,
+                    attempt + 1,
+                    GOOGLE_ERROR_RETRIES,
+                )
+                time.sleep(min(MAX_GOOGLE_ERROR_WAIT, 2 ** (attempt + 1)))
         result = {"quotes": quotes, "unverified": rejected, "empty": not quotes and not rejected}
         with self._lock:
             if len(self._cache) >= CACHE_LIMIT:
@@ -134,14 +167,21 @@ class LiveQuotes:
                 time.sleep(wait)
             for attempt in range(NETWORK_RETRIES + 1):
                 try:
-                    client = primp.Client(
-                        impersonate="chrome", timeout=25, cookie_store=True, cookies=get_cookies()
-                    )
-                    response = client.get(
+                    # Reuse one connection: a new TLS handshake per search costs
+                    # 0.1-0.2 s. Only this thread uses it, under the network lock.
+                    if self._client is None:
+                        self._client = primp.Client(
+                            impersonate="chrome",
+                            timeout=25,
+                            cookie_store=True,
+                            cookies=get_cookies(),
+                        )
+                    response = self._client.get(
                         "https://www.google.com/travel/flights", params=query.params()
                     )
                     break
                 except (primp.RequestError, OSError) as exc:
+                    self._client = None
                     if attempt == NETWORK_RETRIES:
                         logger.warning(
                             "Google network request failed after %d attempts (%s: %s)",
@@ -153,8 +193,8 @@ class LiveQuotes:
                             "Connessione a Google non riuscita dopo vari tentativi. "
                             "Puoi premere Riprendi."
                         ) from exc
-                    # A reset is often a stale HTTP/2 connection. Recreate the
-                    # client and wait briefly; this does not retry a 403/429.
+                    # A reset is often a stale HTTP/2 connection. The client was
+                    # dropped above; wait briefly. This does not retry a 403/429.
                     retry_wait = 1.5 * (attempt + 1)
                     logger.info(
                         "Google network request failed (%s); retry %d/%d in %.1fs",
@@ -169,6 +209,7 @@ class LiveQuotes:
             # retries, so a slow/retried call cannot create a burst afterwards.
             self._next_request = time.monotonic() + self.request_interval
             if response.status_code in (403, 429) or "unusual traffic" in text[:6000].lower():
+                self._client = None
                 self.blocked_until = time.monotonic() + 900
                 raise LiveBlocked("Google ha limitato le richieste. Nessun tentativo automatico.")
             if response.status_code != HTTP_OK:
@@ -218,13 +259,18 @@ def _is_empty_shopping_response(payload, expected_route):
         return False
 
 
-def decode(html, request, url, *, expected_route=None):  # noqa: PLR0912 - validate the observed wire format
+def decode(html, request, url, *, expected_route=None):  # noqa: PLR0912, PLR0915 - validate the observed wire format
     from fli.search._decoders import parse_flight_row
     from selectolax.lexbor import LexborHTMLParser
 
     script = LexborHTMLParser(html).css_first(r"script.ds\:1")
     if script is None:
         raise LiveUnavailable("Pagina Google senza dati voli: consenso, blocco o formato cambiato.")
+    if "travel.frontend.flights.ErrorResponse" in script.text():
+        raise LiveTransient(
+            "Google ha restituito un errore temporaneo anche dopo vari tentativi. "
+            "Puoi premere Riprendi."
+        )
     try:
         payload = json.loads(script.text().split("data:", 1)[1].rsplit(",", 1)[0])
         rows = []
@@ -316,3 +362,39 @@ def decode(html, request, url, *, expected_route=None):  # noqa: PLR0912 - valid
         except (ValueError, KeyError, TypeError, IndexError, AttributeError):
             rejected += 1
     return quotes, rejected
+
+
+def round_trip_url(trip, request):
+    """Google Flights page for the same airports and dates as one A/R search.
+
+    Its fares may differ from two one-way tickets; an open-jaw trip has none.
+    """
+    back = trip.get("inbound")
+    if not back:
+        return None
+    out = trip["outbound"]["segments"]
+    origin, destination = out[0]["from_code"], out[-1]["to_code"]
+    if (back["segments"][0]["from_code"], back["segments"][-1]["to_code"]) != (destination, origin):
+        return None
+    from fast_flights import FlightQuery, Passengers, create_query
+
+    query = create_query(
+        flights=[
+            FlightQuery(date=out[0]["departure"][:10], from_airport=origin, to_airport=destination),
+            FlightQuery(
+                date=back["segments"][0]["departure"][:10],
+                from_airport=destination,
+                to_airport=origin,
+            ),
+        ],
+        passengers=Passengers(
+            adults=request.adults, children=request.children, infants_on_lap=request.infants
+        ),
+        seat=request.seat,
+        trip="round-trip",
+        currency=request.currency,
+        language="it",
+        max_stops=request.max_stops,
+    )
+    return query.url()
+

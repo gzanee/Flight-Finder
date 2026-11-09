@@ -117,7 +117,8 @@ Gli stati sono `running`, `cancelling`, `cancelled`, `blocked`, `interrupted`,
 Parametri GET: `offset` e `sort=price|useful|duration|departure`.
 
 La consultazione ammette anche filtri sui soli risultati salvati:
-`max_price` (totale EUR), `min_hours`, `origin`, `destination`, `airline`
+`max_price` (totale EUR), `min_hours`, `origin`, `destination` (uno o più IATA
+separati da virgole, ad esempio `LGW,LTN,STN` per Londra), `airline`
 (codice IATA, deve coincidere su ogni segmento), `home_before` (HH:MM entro
 il giorno di partenza del ritorno) ed `exclude` (destinazioni IATA separate
 da virgole). Nessuno di questi parametri avvia chiamate a Google. Numeri non
@@ -125,9 +126,20 @@ finiti, negativi, codici e orari malformati restituiscono 400.
 
 `result_count` resta il totale disponibile; `filtered_count` conta i viaggi
 dopo i filtri. `facets` elenca origini, destinazioni e compagnie del bacino
-completo. `groups` contiene una voce per aeroporto di destinazione con
-`count`, `cheapest` (riepilogo più economico) e `featured` (primo viaggio
-secondo l'ordinamento scelto). `airports` mappa i codici ai nomi completi.
+completo. `groups` contiene una voce per città di destinazione con `city`,
+`destinations` (aeroporti della città trovati), `destination` (gli stessi codici
+separati da virgole, pronti per il filtro), `count`, `cheapest` (riepilogo più
+economico) e `featured` (primo viaggio secondo l'ordinamento scelto). `airports`
+mappa i codici a città e nome in italiano e a `country` (ISO 3166-1
+alpha-2 minuscolo, per la bandiera in `static/flags/<country>.png`) (snapshot Wikidata in
+`flightcore/data/airport_names_it.json`, rigenerabile con
+`python -m flightcore.italian_names`).
+
+`GET /api/search/jobs/<id>/export.pdf` restituisce gli stessi risultati come PDF
+da scaricare (`voli-weekend.pdf`): una pagina di sintesi con una riga per città
+e poi, per ogni città, fino a tre weekend diversi con orari, compagnia, prezzo,
+ore sul posto e link a Google Flights. Accetta gli stessi filtri della
+consultazione (non `sort`/`offset`) e non chiama Google.
 
 `recommendations` contiene `cheapest` e, quando disponibili, `longest` e
 `balanced`. Il compromesso richiede più tempo del più economico, non oltre
@@ -172,8 +184,8 @@ Il database locale è `.cache/weekends.sqlite3`. I lavori della versione
 precedente si caricano con i nuovi campi ai valori di default. Il riavvio
 richiede Riprendi. C’è un solo worker per processo per tutte le modalità.
 
-Le richieste sono seriali con 1,5 secondi dopo ogni risposta; l’ambiente
-`FLIGHT_FINDER_GOOGLE_INTERVAL` permette da 1 a 10 secondi. Cache 5 minuti;
+Le richieste sono seriali con 0,3 secondi dopo ogni risposta; l’ambiente
+`FLIGHT_FINDER_GOOGLE_INTERVAL` permette da 0,3 a 10 secondi. Cache 5 minuti;
 max 2 retry per errori di rete. HTTP 403/429 ferma e attiva una pausa di 15
 minuti. Una risposta sconosciuta non equivale a zero voli.
 
