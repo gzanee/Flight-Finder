@@ -23,3 +23,6 @@ ruff==0.16.7
 
 # Fusi orari aeroporti per durate reali e cambio ora
 airportsdata==20260905
+
+# PDF "Scarica PDF" dei risultati. Font IBM Plex Sans (OFL) in flightcore/data/fonts.
+fpdf2==2.9.0

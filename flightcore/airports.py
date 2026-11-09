@@ -9,7 +9,9 @@ l'autocomplete indipendente dalla rete.
 from __future__ import annotations
 
 import functools
+import json
 import unicodedata
+from pathlib import Path
 
 # Aeroporti di partenza del portale.
 HOME_AIRPORTS = {
@@ -217,11 +219,21 @@ DISPLAY_NAMES = {
     "LTN": ("Londra", "Londra Luton"),
     "CDG": ("Parigi", "Parigi Charles de Gaulle"),
     "ORY": ("Parigi", "Parigi Orly"),
-    "BVA": ("Beauvais", "Parigi Beauvais-Tillé"),
+    "BVA": ("Parigi", "Parigi Beauvais-Tillé"),
     "MAD": ("Madrid", "Madrid Barajas Adolfo Suárez"),
     "LIS": ("Lisbona", "Lisbona Humberto Delgado"),
     "OPO": ("Porto", "Porto Francisco Sá Carneiro"),
 }
+
+
+@functools.lru_cache(maxsize=1)
+def _italian_names() -> dict[str, dict[str, str]]:
+    """Snapshot da Wikidata, vedi ``italian_names``."""
+    path = Path(__file__).with_name("data") / "airport_names_it.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))["airports"]
+    except (OSError, ValueError, KeyError):
+        return {}
 
 
 @functools.lru_cache(maxsize=1)
@@ -235,10 +247,15 @@ def details(code: str) -> dict[str, str]:
     """Readable labels, also for quotes saved before names were introduced."""
     code = code.upper()
     metadata = _airport_metadata().get(code, {})
-    full_name = name(code) or metadata.get("name") or "Aeroporto non identificato"
-    city = metadata.get("city") or full_name
+    italian = _italian_names().get(code, {})
+    full_name = (
+        italian.get("name") or name(code) or metadata.get("name") or "Aeroporto non identificato"
+    )
+    city = italian.get("city") or metadata.get("city") or full_name
     city, full_name = DISPLAY_NAMES.get(code, (city, full_name))
-    return {"code": code, "city": city, "name": full_name}
+    # ISO 3166-1 alpha-2, for the flag next to the city name ("" if unknown).
+    country = (metadata.get("country") or "").lower()
+    return {"code": code, "city": city, "name": full_name, "country": country}
 
 
 def exists(code: str) -> bool:
@@ -299,7 +316,12 @@ def search(keyword: str, limit: int = 10) -> list[dict]:
 
     catalog = _catalog()
     return [
-        {"code": code, "name": catalog[code], "home": code in HOME_AIRPORTS}
+        {
+            "code": code,
+            "name": catalog[code],
+            "city": details(code)["city"],
+            "home": code in HOME_AIRPORTS,
+        }
         for code in final[:limit]
     ]
 

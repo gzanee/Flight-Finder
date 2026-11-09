@@ -132,3 +132,26 @@ def test_lista_personalizzata_non_scartata_silenziosamente(codes):
 
     with pytest.raises(SearchValidationError):
         airport_codes(codes, "Destinazioni", 200)
+
+
+def test_nomi_italiani_e_aeroporti_secondari_nella_citta():
+    from flightcore import airports
+    from flightcore.italian_names import pick_city
+
+    assert airports.details("GDN") == {
+        "code": "GDN",
+        "city": "Danzica",
+        "name": "Aeroporto di Danzica-Lech Wałęsa",
+        "country": "pl",
+    }
+    assert {airports.details(c)["city"] for c in ("STN", "LTN", "LGW", "LHR")} == {"Londra"}
+    assert airports.details("BVA")["city"] == airports.details("CDG")["city"] == "Parigi"
+    assert airports.details("CRL")["city"] == "Bruxelles"
+    assert airports.details("VCE")["city"] == "Venezia"
+    assert airports.details("TSF")["city"] == "Treviso"
+    # Fuori dallo snapshot resta il catalogo offline.
+    assert airports.details("XXQ")["name"] == "Aeroporto non identificato"
+    assert pick_city("Aeroporto di Danzica-Lech Wałęsa", ["Tripla Città", "Danzica"]) == "Danzica"
+    assert pick_city("Aeroporto di Palma di Maiorca", ["Maiorca", "Palma di Maiorca"]) == (
+        "Palma di Maiorca"
+    )

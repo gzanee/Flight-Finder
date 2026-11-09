@@ -194,3 +194,50 @@ def test_suggestions_and_group_order_use_best_trip_beyond_first_page(tmp_path):
     ranked = manager.public(jid, sort="useful")
     assert ranked["groups"][0]["destination"] == "MAD"
     assert ranked["groups"][0]["featured"]["useful_minutes"] == 50 * 60
+
+
+def test_groups_by_city_and_filter_covers_all_its_airports(tmp_path):
+    manager, _live, jid, trips = stored_trips(tmp_path, 3)
+    for trip, airport in zip(trips, ["STN", "LTN", "GDN"], strict=True):
+        trip["outbound"]["segments"][-1]["to_code"] = airport
+    save_trips(manager, jid, trips)
+    job = manager.public(jid)
+    assert [(g["city"], g["destination"], g["count"]) for g in job["groups"]] == [
+        ("Londra", "LTN,STN", 2),
+        ("Danzica", "GDN", 1),
+    ]
+    assert job["groups"][0]["cheapest"]["price"] == 40
+    london = ResultFilters.parse({"destination": "ltn,STN"})
+    assert manager.public(jid, filters=london)["filtered_count"] == 2
+    assert manager.public(jid, filters=ResultFilters.parse({"exclude": "LTN,STN"}))[
+        "filtered_count"
+    ] == 1
+    with pytest.raises(SearchValidationError):
+        ResultFilters.parse({"destination": "STN,LONDON"})
+
+
+def test_pdf_export_follows_filters_without_calling_google(monkeypatch, tmp_path):
+    from app import app
+    from flightcore import flexible_api
+    from flightcore.pdf_export import by_city
+
+    manager, live, jid, trips = stored_trips(tmp_path, 8)
+    for trip, airport in zip(trips, ["STN", "LTN", "STN", "GDN"] * 2, strict=True):
+        trip["outbound"]["segments"][-1]["to_code"] = airport
+    save_trips(manager, jid, trips)
+    monkeypatch.setattr(flexible_api, "manager", manager)
+    client = app.test_client()
+    calls = list(live.calls)
+    response = client.get(f"/api/search/jobs/{jid}/export.pdf?exclude=GDN")
+    assert response.status_code == 200 and response.mimetype == "application/pdf"
+    assert response.data.startswith(b"%PDF") and "attachment" in response.headers[
+        "Content-Disposition"
+    ]
+    _spec, exported = manager.export(jid, ResultFilters.parse({"exclude": "GDN"}))
+    cities = by_city(exported)
+    assert [(c["name"], c["codes"], c["count"]) for c in cities] == [("Londra", ["LTN", "STN"], 6)]
+    # Same weekend on every copy here: one line per distinct weekend.
+    assert len(cities[0]["trips"]) == 1 and cities[0]["trips"][0]["price"] == 40
+    assert client.get(f"/api/search/jobs/{jid}/export.pdf?max_price=1").status_code == 200
+    assert client.get(f"/api/search/jobs/{jid}/export.pdf?min_hours=NaN").status_code == 400
+    assert live.calls == calls

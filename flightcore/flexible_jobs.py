@@ -13,8 +13,8 @@ from pathlib import Path
 
 from .airports import details as airport_details
 from .flexible import FlexibleRequest, combine, fingerprint, matches, return_routes, single_trip
-from .live_quotes import QUOTE_TTL, LiveBlocked, LiveQuotes, LiveUnavailable
-from .result_browser import browse_results
+from .live_quotes import QUOTE_TTL, LiveBlocked, LiveQuotes, LiveUnavailable, round_trip_url
+from .result_browser import ResultFilters, browse_results, sort_key
 
 
 def utc_now():
@@ -205,6 +205,18 @@ class JobManager:
         ):
             job["status"] = "interrupted"
             job["issues"] = ["Server riavviato: premi Riprendi per continuare."]
+        all_results = self._current_results(job)
+        job["airports"] = result_airports({**job, "results": all_results})
+        job.update(browse_results(all_results, sort, offset, filters, focus))
+        request = FlexibleRequest(**job["request"])
+        for item in job["results"]:  # only the visible page
+            item["round_trip_url"] = round_trip_url(item, request)
+        job["plan"] = {k: v for k, v in job["plan"].items() if k != "tasks"}
+        return job
+
+    @staticmethod
+    def _current_results(job):
+        """Saved trips with rechecks applied; removes results/rechecks from job."""
         results = job.pop("results")
         for result_id, check in job.pop("rechecks", {}).items():
             if check["status"] == "confirmed":
@@ -216,10 +228,17 @@ class JobManager:
         for item in all_results:
             age = (now - datetime.fromisoformat(item["checked_at"])).total_seconds()
             item["needs_recheck"] = age > QUOTE_TTL
-        job["airports"] = result_airports({**job, "results": all_results})
-        job.update(browse_results(all_results, sort, offset, filters, focus))
-        job["plan"] = {k: v for k, v in job["plan"].items() if k != "tasks"}
-        return job
+        return all_results
+
+    def export(self, job_id, filters=None):
+        """Request and filtered trips for a PDF, cheapest first. No provider calls."""
+        job = self.get(job_id)
+        filters = filters or ResultFilters()
+        trips = sorted(
+            (t for t in self._current_results(job) if filters.matches(t)),
+            key=lambda t: sort_key(t, "price"),
+        )
+        return job["request"], trips
 
     def recheck(self, job_id, result_id):
         job = self.get(job_id)

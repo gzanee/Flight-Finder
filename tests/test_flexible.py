@@ -22,7 +22,13 @@ from flightcore.flexible import (
     matches,
 )
 from flightcore.flexible_jobs import JobManager
-from flightcore.live_quotes import LiveBlocked, LiveQuotes, LiveUnavailable, decode
+from flightcore.live_quotes import (
+    LiveBlocked,
+    LiveQuotes,
+    LiveTransient,
+    LiveUnavailable,
+    decode,
+)
 
 
 def request_spec(**extra):
@@ -279,6 +285,28 @@ def test_empty_vs_broken_page_distinguished():
             request_spec(),
             "",
         )
+
+
+GOOGLE_ERROR_PAGE = (
+    "<script class=\"ds:1\">AF_initDataCallback({key: 'ds:1',  data:[13,null,"
+    '[["type.googleapis.com/travel.frontend.flights.ErrorResponse",[[null,[[1,2,3],'
+    'null,null,null,null,[[0]]],0,"a","b"],0]]]],errorHasStatus: true,});</script>'
+)
+
+
+def test_google_error_response_is_transient_and_retried(monkeypatch):
+    with pytest.raises(LiveTransient):
+        decode(GOOGLE_ERROR_PAGE, request_spec(), "")
+    monkeypatch.setattr("flightcore.live_quotes.time.sleep", lambda _seconds: None)
+    live = LiveQuotes()
+    pages = [GOOGLE_ERROR_PAGE, html_payload([wire_row()])]
+    monkeypatch.setattr(live, "_fetch", lambda _query: pages.pop(0))
+    found = live.search("VCE", "BCN", "2026-10-02", request_spec())
+    assert len(found["quotes"]) == 1 and not pages
+    live = LiveQuotes()
+    monkeypatch.setattr(live, "_fetch", lambda _query: GOOGLE_ERROR_PAGE)
+    with pytest.raises(LiveTransient):
+        live.search("VCE", "BCN", "2026-10-02", request_spec())
 
 
 def null_results_payload(origin="VCE", destination="ADB", *, suggestions=True):
@@ -629,14 +657,14 @@ def test_google_hour_query_does_not_drop_last_partial_hour(monkeypatch, end, exp
 def test_google_request_interval_is_configurable_with_safe_bounds(monkeypatch):
     from flightcore.live_quotes import request_interval
 
-    monkeypatch.setenv("FLIGHT_FINDER_GOOGLE_INTERVAL", "0.2")
-    assert request_interval() == 1.0
+    monkeypatch.setenv("FLIGHT_FINDER_GOOGLE_INTERVAL", "0.1")
+    assert request_interval() == 0.3
     monkeypatch.setenv("FLIGHT_FINDER_GOOGLE_INTERVAL", "3.25")
     assert request_interval() == 3.25
     monkeypatch.setenv("FLIGHT_FINDER_GOOGLE_INTERVAL", "99")
     assert request_interval() == 10.0
     monkeypatch.setenv("FLIGHT_FINDER_GOOGLE_INTERVAL", "not-a-number")
-    assert request_interval() == 1.5
+    assert request_interval() == 0.3
 
 
 def test_real_worker_cancellation_and_single_active_job(tmp_path):
@@ -682,3 +710,13 @@ def test_failed_recheck_is_503_without_false_confirmation(monkeypatch, tmp_path)
     response = app.test_client().post(f"/api/flexible/jobs/{jid}/results/{pair_id}/recheck")
     assert response.status_code == 503 and response.json["status"] == "unavailable"
     assert m.get(jid)["rechecks"] == {}
+
+
+def test_round_trip_link_opens_one_google_search_for_both_dates():
+    from flightcore.live_quotes import round_trip_url
+
+    r = request_spec(adults=2)
+    url = round_trip_url(combine(quote(), returning(), r), r)
+    assert url.startswith("https://www.google.com/travel/flights")
+    assert round_trip_url({"inbound": None}, r) is None
+
