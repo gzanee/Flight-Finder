@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
+import threading
 from datetime import date, timedelta
 
 from dotenv import load_dotenv
@@ -102,6 +104,14 @@ def api_airports():
     return jsonify(success=True, airports=airports.search(keyword, limit=10))
 
 
+@app.route("/api/countries")
+def api_countries():
+    from flightcore.flexible import MAX_ORIGINS, airport_codes
+
+    origins = airport_codes(request.args.get("origins", "VCE,TSF"), "Partenza", MAX_ORIGINS)
+    return jsonify(success=True, countries=airports.countries(list(origins)))
+
+
 @app.route("/api/health")
 def api_health():
     import time
@@ -118,6 +128,20 @@ def api_health():
         currency="EUR",
         request_interval=live.request_interval,
     )
+
+
+def relaunch():
+    """Replace this process with a fresh one: new code, templates and port."""
+    # The server keeps its listening socket inheritable: close it to free the port.
+    os.closerange(3, 4096)
+    os.execv(sys.executable, [sys.executable, *sys.argv])
+
+
+@app.route("/api/restart", methods=["POST"])
+def api_restart():
+    # After the reply is sent; a running search is saved and can be resumed.
+    threading.Timer(0.5, relaunch).start()
+    return jsonify(success=True, message="Riavvio in corso.")
 
 
 @app.route("/api/cache", methods=["DELETE"])

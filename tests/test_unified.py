@@ -5,7 +5,13 @@ from datetime import date
 
 import pytest
 
-from flightcore.flexible import FlexibleRequest, SearchValidationError, build_plan, matches
+from flightcore.flexible import (
+    FlexibleRequest,
+    Schedule,
+    SearchValidationError,
+    build_plan,
+    matches,
+)
 from flightcore.live_quotes import LiveQuotes
 from tests.test_flexible import html_payload, make_manager, quote, request_spec, wire_row
 
@@ -52,8 +58,10 @@ def test_same_day_round_trip_allowed():
 def test_multiple_airports_normalized_without_excluding_cross_routes():
     r = request_spec(origins="FCO, CIA, fco", destinations=["CIA", "MXP"])
     plan = build_plan(r, {})
-    routes = {(task[3], task[2]) for task in plan["tasks"]}
-    assert routes == {("FCO", "CIA"), ("FCO", "MXP"), ("CIA", "MXP")}
+    schedule = Schedule(r, plan["destinations"])
+    assert set(schedule.routes) == {("FCO", "CIA"), ("FCO", "MXP"), ("CIA", "MXP")}
+    searched = [(o, d) for origins, dests in schedule.out_batches for o in origins for d in dests]
+    assert sorted(searched) == sorted(schedule.routes)  # no airport is paired with itself
 
 
 def test_curated_destinations_and_anywhere_fallback_are_explicit(monkeypatch):

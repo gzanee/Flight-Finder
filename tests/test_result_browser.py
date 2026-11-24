@@ -236,8 +236,75 @@ def test_pdf_export_follows_filters_without_calling_google(monkeypatch, tmp_path
     _spec, exported = manager.export(jid, ResultFilters.parse({"exclude": "GDN"}))
     cities = by_city(exported)
     assert [(c["name"], c["codes"], c["count"]) for c in cities] == [("Londra", ["LTN", "STN"], 6)]
-    # Same weekend on every copy here: one line per distinct weekend.
-    assert len(cities[0]["trips"]) == 1 and cities[0]["trips"][0]["price"] == 40
+    # Same weekend on every copy here: the places left go to the next cheapest.
+    assert [t["price"] for t in cities[0]["trips"]] == [40, 41, 42]
     assert client.get(f"/api/search/jobs/{jid}/export.pdf?max_price=1").status_code == 200
     assert client.get(f"/api/search/jobs/{jid}/export.pdf?min_hours=NaN").status_code == 400
+    assert client.get(f"/api/search/jobs/{jid}/export.pdf?per_city=500").status_code == 200
+    for bad in ("0", "-1", "x"):
+        assert client.get(f"/api/search/jobs/{jid}/export.pdf?per_city={bad}").status_code == 400
     assert live.calls == calls
+
+
+def test_pdf_summary_row_never_splits_flag_from_city(monkeypatch, tmp_path):
+    from flightcore import pdf_export
+
+    codes = [
+        *("STN", "MAD", "BCN", "LIS", "OPO", "VLC", "SVQ", "BIO", "AGP", "PMI", "CDG"),
+        *("LYS", "NCE", "MRS", "BRU", "AMS", "EIN", "BER", "MUC", "HAM", "VIE", "PRG"),
+        *("BUD", "WAW", "KRK", "GDN", "VNO", "RIX", "TLL", "HEL", "ARN", "CPH", "OSL"),
+        *("DUB", "EDI", "MAN", "BRS", "OTP", "SOF", "ATH", "SKG", "MLA", "ZRH", "GVA"),
+    ]
+    manager, _live, jid, trips = stored_trips(tmp_path, len(codes))
+    for trip, code in zip(trips, codes, strict=True):
+        trip["outbound"]["segments"][-1]["to_code"] = code
+        trip["inbound"]["segments"][0]["from_code"] = code
+    save_trips(manager, jid, trips)
+    spec, exported = manager.export(jid, ResultFilters.parse({}))
+    names = {c["name"] for c in pdf_export.by_city(exported)}
+    flags, rows = [], []
+    original_flag, original_cell = pdf_export.Document.flag, pdf_export.Document.cell
+
+    def flag(self, country, x, y, height):
+        flags.append(self.page_no())
+        return original_flag(self, country, x, y, height)
+
+    def cell(self, w=None, h=None, text="", *args, **kwargs):
+        result = original_cell(self, w, h, text, *args, **kwargs)
+        if text in names and h == 6.4:  # page after any automatic break
+            rows.append(self.page_no())
+        return result
+
+    monkeypatch.setattr(pdf_export.Document, "flag", flag)
+    monkeypatch.setattr(pdf_export.Document, "cell", cell)
+    pdf_export.build_pdf(spec, exported)
+    assert len(set(rows)) > 1  # the summary really spans more than one page
+    assert flags[: len(rows)] == rows
+
+
+def test_pdf_keeps_the_requested_number_of_weekends_per_city(tmp_path):
+    from flightcore.pdf_export import by_city
+
+    _manager, _live, _jid, trips = stored_trips(tmp_path, 6)
+    for i, trip in enumerate(trips):
+        first = trip["outbound"]["segments"][0]
+        first["departure"] = f"2027-01-{i + 1:02d}" + first["departure"][10:]
+    assert len(by_city(trips)[0]["trips"]) == 3
+    assert [t["price"] for t in by_city(trips, 5)[0]["trips"]] == [40, 41, 42, 43, 44]
+    assert len(by_city(trips, 20)[0]["trips"]) == 6
+    # Two weekends, three flights each: both weekends first, then the cheapest left.
+    for i, trip in enumerate(trips):
+        first = trip["outbound"]["segments"][0]
+        first["departure"] = f"2027-01-{i // 3 + 1:02d}" + first["departure"][10:]
+    assert [t["price"] for t in by_city(trips, 3)[0]["trips"]] == [40, 41, 43]
+    assert [t["price"] for t in by_city(trips, 100)[0]["trips"]] == [40, 41, 42, 43, 44, 45]
+
+
+def test_pdf_long_city_list_flows_across_pages(tmp_path):
+    from flightcore import pdf_export
+
+    manager, _live, jid, _trips = stored_trips(tmp_path, 100)
+    spec, exported = manager.export(jid, ResultFilters.parse({}))
+    pdf = pdf_export.build_pdf(spec, exported, 100)
+    # About 24 rows a page: one page each would mean the rows broke one by one.
+    assert pdf.count(b"/Type /Page\n") + pdf.count(b"/Type /Page ") <= 7

@@ -37,6 +37,43 @@ const countLabel = (n, single, plural) => `${n} ${n === 1 ? single : plural}`;
 const tripLabel = spec => spec.trip_type === 'one_way' ? 'solo andata' : 'andata e ritorno';
 const localTime = iso => iso.slice(11,16);
 const localDay = iso => new Date(iso.slice(0,10) + 'T12:00:00').toLocaleDateString('it-IT', {weekday:'short',day:'numeric',month:'short'});
+
+const nightsBetween = (a, b) => Math.round((new Date(b.slice(0,10)+'T12:00:00') - new Date(a.slice(0,10)+'T12:00:00')) / 864e5);
+function renderCalendar(items) {
+  if (!items.length) return '';
+  const byDay = new Map();
+  for (const item of items) {
+    const key = item.date.slice(0,10);
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(item);
+  }
+  const best = [...byDay.values()].map(list => Math.min(...list.map(x => x.price)));
+  const lo = Math.min(...best), hi = Math.max(...best);
+  const tier = p => hi === lo || p <= lo + (hi-lo)/3 ? 'cheap' : p <= lo + 2*(hi-lo)/3 ? 'mid' : 'high';
+  const keys = [...byDay.keys()].sort();
+  const months = [];
+  for (let d = new Date(keys[0]+'T12:00:00'); d <= new Date(keys.at(-1)+'T12:00:00'); d.setMonth(d.getMonth()+1, 1)) months.push([d.getFullYear(), d.getMonth()]);
+  const pad = n => String(n).padStart(2,'0');
+  const weekdays = ['lun','mar','mer','gio','ven','sab','dom'].map(w => `<span class="cal-wd">${w}</span>`).join('');
+  const html = months.map(([y, m]) => {
+    const first = new Date(y, m, 1, 12), days = new Date(y, m+1, 0).getDate();
+    const cells = Array.from({length:(first.getDay()+6)%7}, () => '<span class="cal-empty"></span>');
+    for (let day = 1; day <= days; day++) {
+      const key = `${y}-${pad(m+1)}-${pad(day)}`, list = byDay.get(key);
+      if (!list) { cells.push(`<span class="cal-day cal-none"><b>${day}</b></span>`); continue; }
+      list.sort((a,b) => a.price - b.price);
+      const top = list[0], isBest = top.price === lo;
+      const nights = top.return_date ? nightsBetween(top.date, top.return_date) : null;
+      const sub = list.length > 1 ? `${list.length} ritorni` : nights === null ? 'solo andata' : nights === 0 ? 'in giornata' : `${nights} ${nights === 1 ? 'notte' : 'notti'}`;
+      const tip = list.map(x => `${localDay(x.date)}${x.return_date ? ' → '+localDay(x.return_date) : ''}: ${money(x.price)}`).join('\n');
+      cells.push(`<span class="cal-day cal-${tier(top.price)}${isBest ? ' cal-best' : ''}" title="${escapeHTML(tip)}"><b>${day}</b><strong>${money(top.price)}</strong><small>${sub}</small>${isBest ? '<i>top</i>' : ''}</span>`);
+    }
+    const title = first.toLocaleDateString('it-IT', {month:'long', year:'numeric'});
+    return `<section class="cal-month"><h4>${title}</h4><div class="cal-grid">${weekdays}${cells.join('')}</div></section>`;
+  }).join('');
+  const legend = `<div class="cal-legend"><span><i class="cal-cheap"></i>più economico</span><span><i class="cal-mid"></i>nella media</span><span><i class="cal-high"></i>più caro</span><span class="cal-hint">Prezzo minimo per giorno di partenza · passa sopra un giorno per vedere i ritorni</span></div>`;
+  return legend + `<div class="cal-months">${html}</div>`;
+}
 const dateISO = value => `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;
 const addDays = (iso, n) => { const d = new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n); return dateISO(d); };
 function error(message) { $('error').textContent = message; $('error').hidden = !message; }
@@ -56,9 +93,20 @@ async function api(path, method='GET', body) {
 const selectedAirports = {
   origins: new Map([['VCE','Venezia'],['TSF','Treviso']]), destinations: new Map()
 };
+// A whole country is one entry, keyed "@" + ISO code, holding its airports.
 function renderAirports(kind) {
-  $(kind+'-chips').innerHTML = [...selectedAirports[kind]].map(([code,name]) =>
-    `<button type="button" class="airport-chip" data-code="${escapeHTML(code)}" aria-label="Rimuovi ${escapeHTML(name)}">${escapeHTML(name)}${name === code ? '' : ` <b>${escapeHTML(code)}</b>`}<span aria-hidden="true">×</span></button>`).join('');
+  $(kind+'-chips').innerHTML = [...selectedAirports[kind]].map(([code,name]) => name.codes
+    ? `<button type="button" class="airport-chip" data-code="${escapeHTML(code)}" aria-label="Rimuovi ${escapeHTML(name.name)}" title="${escapeHTML(name.cities.join(', '))}"><img class="flag" src="/static/flags/${escapeHTML(name.country)}.png" alt="" width="20" height="15">${escapeHTML(name.name)} <b>${name.codes.length} aeroporti</b><span aria-hidden="true">×</span></button>`
+    : `<button type="button" class="airport-chip" data-code="${escapeHTML(code)}" aria-label="Rimuovi ${escapeHTML(name)}">${escapeHTML(name)}${name === code ? '' : ` <b>${escapeHTML(code)}</b>`}<span aria-hidden="true">×</span></button>`).join('');
+}
+const destinationCodes = () => [...new Set([...selectedAirports.destinations].flatMap(([code,name]) => name.codes || [code]))];
+function addCountry(hit) {
+  const codes = hit.airports.map(a => a.code);
+  if (new Set([...destinationCodes(), ...codes]).size > 200) return error('Hai raggiunto il numero massimo di aeroporti.');
+  const map = selectedAirports.destinations;
+  codes.forEach(code => map.delete(code));  // the country already includes them
+  map.set('@'+hit.country, {name:hit.city, country:hit.country, codes, cities:hit.airports.map(a => a.city)});
+  renderAirports('destinations');
 }
 function addAirport(kind, airport) {
   const map = selectedAirports[kind];
@@ -66,11 +114,26 @@ function addAirport(kind, airport) {
   map.set(airport.code, airport.city || airport.name || airport.code);
   renderAirports(kind);
 }
+// Whole countries as a destination: the airports linked to the chosen origins,
+// named in Italian by the browser. Loaded once per set of origins.
+const fold = text => text.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const countryNames = new Intl.DisplayNames(['it'],{type:'region'});
+let countryCatalog = {key:null, list:[]};
+async function countryHits(q) {
+  const key = [...selectedAirports.origins.keys()].join(',');
+  if (countryCatalog.key !== key) {
+    const data = await api('/api/countries?origins='+encodeURIComponent(key));
+    countryCatalog = {key, list:Object.entries(data.countries).map(([country,entry]) => ({country, city:countryNames.of(country.toUpperCase()), ...entry}))};
+  }
+  const needle = fold(q);
+  return countryCatalog.list.filter(c => fold(c.city).startsWith(needle) || c.country === needle)
+    .sort((a,b) => a.city.localeCompare(b.city,'it')).slice(0,3);
+}
 for (const kind of ['origins','destinations']) {
   const input = $(kind+'-query'), suggestions = $(kind+'-suggestions');
   let timer, sequence = 0, hits = [], active = -1;
   const close = () => { sequence++; suggestions.hidden = true; input.setAttribute('aria-expanded','false'); input.removeAttribute('aria-activedescendant'); active = -1; };
-  const choose = airport => { addAirport(kind,airport); input.value = ''; close(); input.focus(); };
+  const choose = hit => { hit.airports ? addCountry(hit) : addAirport(kind,hit); input.value = ''; close(); input.focus(); };
   $(kind+'-chips').onclick = event => {
     const button = event.target.closest('[data-code]'); if (!button) return;
     selectedAirports[kind].delete(button.dataset.code); renderAirports(kind);
@@ -84,8 +147,11 @@ for (const kind of ['origins','destinations']) {
       try {
         const data = await api('/api/airports?q='+encodeURIComponent(q));
         if (sequence !== current || input.value.trim() !== q) return;
-        hits = data.airports.filter(a => !selectedAirports[kind].has(a.code));
-        suggestions.innerHTML = hits.map((a,i) => `<button type="button" role="option" aria-selected="false" id="${kind}-option-${i}" data-index="${i}"><span>${escapeHTML(a.city || a.name)}<small>${escapeHTML(a.name)}</small></span><b>${escapeHTML(a.code)}</b></button>`).join('');
+        const countries = kind === 'destinations' ? await countryHits(q).catch(() => []) : [];
+        if (sequence !== current || input.value.trim() !== q) return;
+        const chosen = kind === 'destinations' ? new Set(destinationCodes()) : selectedAirports[kind];
+        hits = [...countries.filter(c => !selectedAirports[kind].has('@'+c.country)), ...data.airports.filter(a => !chosen.has(a.code))];
+        suggestions.innerHTML = hits.map((a,i) => `<button type="button" role="option" aria-selected="false" id="${kind}-option-${i}" data-index="${i}"><span>${escapeHTML(a.city || a.name)}<small>${a.airports ? (a.linked ? `Tutto il paese · ${countLabel(a.airports.length,'aeroporto collegato','aeroporti collegati')}` : `Senza voli diretti · ${escapeHTML([...new Set(a.airports.map(x => x.city))].join(', '))}`) : escapeHTML(a.name)}</small></span>${a.airports ? `<img class="flag" src="/static/flags/${escapeHTML(a.country)}.png" alt="" width="20" height="15">` : `<b>${escapeHTML(a.code)}</b>`}</button>`).join('');
         suggestions.hidden = !hits.length; input.setAttribute('aria-expanded',String(!!hits.length));
       } catch { close(); }
     },200);
@@ -224,7 +290,7 @@ function values() {
   if (!selectedAirports.origins.size) throw new Error('Da dove parti? Aggiungi almeno un aeroporto.');
   const round = $('trip-type').value === 'round_trip', flexible = $('date-mode').value === 'flexible';
   const spec = {
-    origins:[...selectedAirports.origins.keys()],destinations:$('anywhere').checked ? [] : [...selectedAirports.destinations.keys()],
+    origins:[...selectedAirports.origins.keys()],destinations:$('anywhere').checked ? [] : destinationCodes(),
     trip_type:$('trip-type').value, date_mode:$('date-mode').value,destination_set:$('destination-set').value,
     start_date:$('start-date').value, end_date:round || flexible ? $('end-date').value : $('start-date').value,
     departure_days:[...$('departure-days').querySelectorAll('input:checked')].map(el => Number(el.value)),
@@ -270,10 +336,11 @@ $('trip-form').onsubmit = async event => {
 updateModes(); travelersSummary();
 
 const states = {running:'Stiamo cercando i voli migliori…',cancelling:'Ci fermiamo…',cancelled:'Ricerca fermata',blocked:'Ricerca in pausa',interrupted:'Ricerca interrotta',complete:'Ricerca completata'};
-const SECONDS_PER_SEARCH = 0.5;
+// The server measures the pace of this search; before its first requests it
+// has no estimate yet (eta_seconds is null).
 function remaining(job) {
-  const left = job.total ? (job.total - job.completed) / job.total * job.plan.searches_upper_bound : 0;
-  const minutes = Math.ceil(left * SECONDS_PER_SEARCH / 60);
+  if (job.eta_seconds == null) return 'qualche minuto';
+  const minutes = Math.ceil(job.eta_seconds / 60);
   return minutes <= 1 ? 'meno di un minuto' : `circa ${minutes} minuti`;
 }
 async function poll() {
@@ -310,7 +377,7 @@ async function poll() {
     $('results-heading').textContent = job.filtered_count ? `${countLabel(job.filtered_count,'viaggio','viaggi')} ${r.trip_type === 'one_way' ? 'di sola andata' : 'andata e ritorno'}` : (running ? 'Cerchiamo…' : 'Nessun viaggio');
     $('result-note').textContent = `${job.status === 'complete' ? '' : 'I risultati si aggiornano mentre cerchiamo. '}Prezzi totali per ${countLabel(r.adults+r.children+r.infants,'viaggiatore','viaggiatori')}, orari locali.`;
     $('calendar-panel').hidden = !(job.calendar?.length > 1);
-    $('calendar').innerHTML = (job.calendar || []).map(item => `<div><span>${localDay(item.date)}${item.return_date ? ' → '+localDay(item.return_date) : ''}</span><strong>${money(item.price)}</strong></div>`).join('');
+    $('calendar').innerHTML = renderCalendar(job.calendar || []);
     const version = `${job.updated_at}|${query}|${resultView}|${job.results.map(x=>x.needs_recheck).join(',')}`;
     if (rendering !== version) {
       rendering = version;
@@ -376,6 +443,23 @@ function syncExport(job) {
   const query = params.toString();
   $('export-pdf').href = `/api/search/jobs/${jobId}/export.pdf${query ? '?'+query : ''}`;
   $('export-pdf').hidden = !job.filtered_count;
+}
+// Asks how many flights to keep per destination, then downloads.
+// A page loaded before the dialog existed keeps the plain download link.
+if ($('export-dialog')) {
+$('export-pdf').addEventListener('click', event => {
+  event.preventDefault();
+  try { $('export-count').value = localStorage.getItem('exportCount') || 3; } catch (error) {}
+  $('export-dialog').showModal();
+  $('export-count').select();
+});
+$('export-cancel').addEventListener('click', () => $('export-dialog').close());
+$('export-dialog').addEventListener('submit', () => {
+  const count = $('export-count').value;
+  try { localStorage.setItem('exportCount', count); } catch (error) {}
+  const href = $('export-pdf').getAttribute('href');
+  location.href = href + (href.includes('?') ? '&' : '?') + 'per_city=' + encodeURIComponent(count);
+});
 }
 function resetResultFilters() {
   for (const id of Object.values(filterFields)) $(id).value = '';
@@ -488,9 +572,11 @@ function card(pair) {
   const people = outbound.travelers;
   const link = (url, label, cls) => url ? `<a class="${cls}" href="${escapeHTML(safeLink(url))}" target="_blank" rel="noopener noreferrer">${label}</a>` : '';
   const primary = round ? (pair.round_trip_url || outbound.booking_url) : outbound.booking_url;
+  // A cheaper single return ticket with this outbound: a hint, its return may differ.
+  const single = pair.round_trip_from;
   const tags = [
     round ? `<span class="tag stay">${duration(pair.useful_minutes)} ${dest === away ? 'a destinazione' : 'tra i voli'}</span>` : '',
-    round ? '<span class="tag">2 biglietti separati</span>' : '',
+    round ? `<span class="tag">2 biglietti separati</span>` : '',
     {cabin:'<span class="tag">Trolley incluso</span>',checked:'<span class="tag">Valigia inclusa</span>'}[outbound.baggage] || '',
   ].join('');
   return `<article class="trip" data-id="${escapeHTML(pair.id)}">
@@ -502,6 +588,7 @@ function card(pair) {
     </div>
     <div class="trip-side">
       <div class="trip-price"><strong>${money(pair.price)}</strong><span>${round ? 'andata e ritorno' : 'solo andata'}${people > 1 ? `, ${people} persone` : ''}</span></div>
+      ${single ? `<p class="single-ticket" title="Prezzo di Google per un solo biglietto di andata e ritorno con questo volo di andata. Il ritorno si sceglie su Google e può non essere quello mostrato qui.">Con questa andata Google vende un biglietto A/R unico da ${money(single)}, ma con un ritorno che può essere diverso da questo.</p>` : ''}
       ${link(primary, 'Vedi offerta', 'primary-link')}
       ${round ? `<div class="leg-links">${link(outbound.booking_url,'Solo andata','text-link')}${link(pair.inbound.booking_url,'Solo ritorno','text-link')}</div>` : ''}
       <div class="price-age ${pair.needs_recheck ? 'stale' : ''}">${pair.needs_recheck ? 'Prezzo da aggiornare' : 'Prezzo delle ' + checked}<button type="button" class="recheck">Aggiorna</button></div>
@@ -544,3 +631,21 @@ $('next-page').onclick = () => {offset+=50; poll();};
 jobId = new URLSearchParams(location.search).get('ricerca');
 if (!jobId) try { jobId = localStorage.getItem('flight-finder-job'); } catch { /* storage optional */ }
 if (jobId) poll();
+// Restarts the portal, waits for it to answer again and reloads the page.
+if ($('restart')) $('restart').addEventListener('click', async () => {
+  const button = $('restart');
+  button.disabled = true; button.textContent = 'Riavvio…';
+  try {
+    const response = await fetch('/api/restart', {method: 'POST'});
+    if (!response.ok) throw new Error('restart');
+  } catch (error) {
+    button.disabled = false; button.textContent = 'Riavvio non riuscito';
+    return;
+  }
+  await new Promise(resolve => setTimeout(resolve, 1200));
+  for (let attempt = 0; attempt < 60; attempt++) {
+    try { if ((await fetch('/api/health', {cache: 'no-store'})).ok) { location.reload(); return; } } catch (error) {}
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  button.disabled = false; button.textContent = 'Riavvio non riuscito';
+});

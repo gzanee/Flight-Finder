@@ -155,3 +155,46 @@ def test_nomi_italiani_e_aeroporti_secondari_nella_citta():
     assert pick_city("Aeroporto di Palma di Maiorca", ["Maiorca", "Palma di Maiorca"]) == (
         "Palma di Maiorca"
     )
+
+
+def test_paesi_raggruppano_gli_aeroporti_collegati(client):
+    dati = client.get("/api/countries?origins=VCE,TSF").get_json()["countries"]
+    spagna = {a["code"]: a["city"] for a in dati["es"]["airports"]}
+    assert dati["es"]["linked"] and spagna["BCN"] == "Barcellona" and "MAD" in spagna
+    assert "LIS" not in spagna and "LIS" in {a["code"] for a in dati["pt"]["airports"]}
+    assert all(len(codice) == 2 and paese["airports"] for codice, paese in dati.items())
+    assert not any(a["code"] in ("VCE", "TSF") for a in dati["it"]["airports"])
+    assert client.get("/api/countries?origins=XXX").status_code == 400
+
+
+def test_paese_senza_voli_diretti_propone_gli_aeroporti_noti(client):
+    india = client.get("/api/countries?origins=VCE,TSF").get_json()["countries"]["in"]
+    assert india["linked"] is False
+    assert {"DEL", "BOM"} <= {a["code"] for a in india["airports"]}
+    sri_lanka = client.get("/api/countries?origins=VCE,TSF").get_json()["countries"]["lk"]
+    assert [a["code"] for a in sri_lanka["airports"]] == ["CMB"]
+
+
+def test_aeroporti_principali_sono_nel_paese_dichiarato():
+    for paese, codici in airports.MAIN_AIRPORTS.items():
+        for codice in codici.split():
+            if airports.exists(codice):
+                assert airports.details(codice)["country"] == paese, codice
+
+
+def test_restart_rilancia_il_processo_dopo_la_risposta(client, monkeypatch):
+    import app as portal
+
+    timers = []
+
+    class Timer:
+        def __init__(self, delay, action):
+            timers.append(action)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(portal.threading, "Timer", Timer)
+    assert client.post("/api/restart").get_json()["success"] is True
+    assert timers == [portal.relaunch]
+    assert client.get("/api/restart").status_code == 405

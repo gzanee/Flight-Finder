@@ -8,7 +8,7 @@
 <script src="{{ url_for('static', filename='weekends.js') }}" defer></script>
 </head>
 <body>
-<header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">✈</span>Flight Finder</a></header>
+<header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">✈</span>Flight Finder</a><button id="restart" class="restart" type="button" title="Riavvia il portale per caricare le ultime modifiche">↻ Riavvia</button></header>
 
 <section class="hero">
   <div class="hero-inner">
@@ -39,7 +39,7 @@
       <label id="destination-set-field" class="inline-select"><span class="sr-only">Che tipo di meta</span><select id="destination-set"><option value="real">Tutte le mete raggiungibili</option>{% for key, info in destination_sets.items() %}<option value="{{ key }}">{{ info[0] }}</option>{% endfor %}</select></label>
       <div id="destinations-picker" class="airport-picker" hidden>
         <div class="airport-chips" id="destinations-chips"></div>
-        <input id="destinations-query" placeholder="Città o aeroporto" autocomplete="off" role="combobox" aria-label="Aggiungi aeroporto di destinazione" aria-expanded="false" aria-autocomplete="list" aria-controls="destinations-suggestions">
+        <input id="destinations-query" placeholder="Città, aeroporto o paese" autocomplete="off" role="combobox" aria-label="Aggiungi aeroporto di destinazione" aria-expanded="false" aria-autocomplete="list" aria-controls="destinations-suggestions">
         <div class="suggestions" id="destinations-suggestions" role="listbox" aria-label="Aeroporti di destinazione suggeriti" hidden></div>
       </div>
     </div>
@@ -152,5 +152,13 @@
   </div>
 </section>
 </main>
+<dialog id="export-dialog" class="export-dialog" aria-labelledby="export-title">
+  <form method="dialog">
+    <h2 id="export-title">Scarica PDF</h2>
+    <label class="field">Quanti voli tenere per ogni destinazione?<input id="export-count" type="number" inputmode="numeric" min="1" step="1" value="3" required></label>
+    <p class="export-hint">I più economici: prima uno per ogni weekend diverso, poi gli altri. Metti un numero alto per tenerli tutti.</p>
+    <div class="export-actions"><button type="button" id="export-cancel" class="text-button">Annulla</button><button type="submit" class="export-confirm">Scarica</button></div>
+  </form>
+</dialog>
 <footer class="site-footer"><p>Flight Finder confronta i prezzi pubblicati su Google Flights. Prezzi e disponibilità possono cambiare: verifica sempre le condizioni sul sito del venditore prima di prenotare.</p></footer>
 </body></html>

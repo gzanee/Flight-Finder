@@ -9,8 +9,8 @@ from flask import Blueprint, Response, jsonify, redirect, render_template, reque
 from . import airports, routes
 from .flexible import FlexibleRequest, SearchValidationError, build_plan, integer
 from .flexible_jobs import JobManager
-from .live_quotes import REQUEST_OVERHEAD, LiveUnavailable, request_interval
-from .pdf_export import build_pdf
+from .live_quotes import LiveUnavailable, seconds_per_search
+from .pdf_export import MAX_PER_CITY, PER_CITY, build_pdf
 from .result_browser import ResultFilters
 
 blueprint = Blueprint("flexible", __name__)
@@ -68,8 +68,8 @@ def missing(_exc):
 def preview():
     spec, plan = plan_request()
     visible = {k: v for k, v in plan.items() if k != "tasks"}
-    per_search = request_interval() + REQUEST_OVERHEAD
-    visible["estimated_minutes"] = round(plan["searches_upper_bound"] * per_search / 60, 1)
+    seconds = plan["searches_upper_bound"] * seconds_per_search(spec)
+    visible["estimated_minutes"] = round(seconds / 60, 1)
     return jsonify(request=spec.to_dict(), plan=visible)
 
 
@@ -102,9 +102,12 @@ def status(job_id):
 @blueprint.route("/api/search/jobs/<job_id>/export.pdf")
 def export_pdf(job_id):
     """The saved results under the current filters, as an easy-to-share PDF."""
+    per_city = integer(
+        request.args.get("per_city", PER_CITY), "Voli per destinazione", 1, MAX_PER_CITY
+    )
     spec, trips = manager.export(job_id, ResultFilters.parse(request.args))
     return Response(
-        build_pdf(spec, trips),
+        build_pdf(spec, trips, per_city),
         mimetype="application/pdf",
         headers={"Content-Disposition": 'attachment; filename="voli-weekend.pdf"'},
     )

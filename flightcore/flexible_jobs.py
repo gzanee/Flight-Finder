@@ -6,19 +6,53 @@ import json
 import os
 import sqlite3
 import threading
+import time
 import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .airports import details as airport_details
-from .flexible import FlexibleRequest, combine, fingerprint, matches, return_routes, single_trip
-from .live_quotes import QUOTE_TTL, LiveBlocked, LiveQuotes, LiveUnavailable, round_trip_url
+from .flexible import (
+    FlexibleRequest,
+    combine,
+    fingerprint,
+    matches,
+    return_routes,
+    search_passes,
+    single_trip,
+)
+from .live_quotes import (
+    QUOTE_TTL,
+    LiveBlocked,
+    LiveQuotes,
+    LiveUnavailable,
+    round_trip_url,
+    seconds_per_search,
+)
 from .result_browser import ResultFilters, browse_results, sort_key
+
+# Jobs saved by an engine with another cursor search again, keeping their trips.
+ENGINE = 3
+# A job with thousands of trips is several MB: write it at most this often.
+# The last second of work is repeated after a crash, never lost or invented.
+SAVE_INTERVAL = 1.0
+# Requests of this run to observe before trusting their measured pace.
+PACE_SAMPLE = 3
+# After the search, trips are compared with Google's single-ticket return
+# fares: one request per route and pair of dates, at most this many.
+ROUND_TRIP_CHECKS = 150
+SHOWN_AIRPORTS = 3
 
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def airport_list(codes):
+    if len(codes) <= SHOWN_AIRPORTS:
+        return ", ".join(codes)
+    return f"{', '.join(codes[: SHOWN_AIRPORTS - 1])} e altri {len(codes) - SHOWN_AIRPORTS + 1}"
 
 
 def result_airports(job):
@@ -41,6 +75,8 @@ class JobManager:
         self._worker = None
         self._active_job_id = None
         self._ready = False
+        self._saved_at = 0.0
+        self._save_cost = 0.0
 
     def connection(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,6 +94,21 @@ class JobManager:
             db.commit()
         finally:
             db.close()
+
+    def stored(self, job_id, *fields):
+        """Single fields of a saved job, without decoding its results."""
+        db = self.connection()
+        try:
+            columns = ", ".join("json_extract(body, ?)" for _ in fields)
+            row = db.execute(
+                f"SELECT {columns} FROM jobs WHERE id = ?",
+                (*("$." + field for field in fields), job_id),
+            ).fetchone()
+        finally:
+            db.close()
+        if not row:
+            raise KeyError(job_id)
+        return row
 
     def get(self, job_id):
         db = self.connection()
@@ -78,8 +129,16 @@ class JobManager:
                 "request": asdict(request),
                 "plan": plan,
                 "status": "running",
+                "engine": ENGINE,
                 "completed": 0,
-                "total": len(plan["tasks"]),
+                "total": plan["searches_upper_bound"],
+                "cursor": [0, 0, 0],
+                "pass": 0,
+                "outbound": {},
+                "requests": 0,
+                "return_days": 0,
+                "return_requests": 0,
+                "eta_seconds": None,
                 "results": {},
                 "rechecks": {},
                 "unverified": 0,
@@ -118,59 +177,42 @@ class JobManager:
                 self.save(job)
 
     def stopped(self, job_id):
-        return self.get(job_id)["status"] == "cancelling"
+        return self.stored(job_id, "status")[0] == "cancelling"
 
-    def run(self, job_id):  # noqa: PLR0912, PLR0915 - explicit cancellable task lifecycle
+    def run(self, job_id):
         job = self.get(job_id)
         request = FlexibleRequest(**job["request"])
+        passes = search_passes(request, job["plan"]["destinations"])
+        if job.get("engine") != ENGINE:
+            job.update(engine=ENGINE, completed=0, cursor=[0, 0, 0], outbound={}, requests=0)
+            job.update({"pass": 0, "return_days": 0, "return_requests": 0})
+        job["total"] = sum(schedule.total for schedule in passes)
+        self._saved_at = 0.0
+        self._save_cost = 0.0
+        pace = {"started": time.monotonic(), "requests": 0}
         try:
-            for task in job["plan"]["tasks"][job["completed"] :]:
-                if self.stopped(job_id):
-                    job["status"] = "cancelled"
-                    break
-                out, back, destination, origin = task
-                job["current"] = f"{origin} → {destination} · {out}" + (
-                    f" / {back}" if back else ""
+            status = "complete"
+            for number in range(job["pass"], len(passes)):
+                pace["later"] = sum(
+                    p.total * seconds_per_search(p.request) for p in passes[number + 1 :]
                 )
-                self._progress(job)
-                if self.stopped(job_id):
-                    job["status"] = "cancelled"
+                pace["done"] = sum(p.total for p in passes[:number])
+                pace["label"] = (
+                    ("Voli diretti · ", "Con scalo · ")[number] if len(passes) > 1 else ""
+                )
+                if self._search(job, request, passes[number], pace) == "cancelled":
+                    status = "cancelled"
                     break
-                found = self.live.search(origin, destination, out, request)
-                job["unverified"] += found["unverified"]
-                job["empty_searches"] += int(found["empty"])
-                outbound = [
-                    q for q in found["quotes"] if matches(q, request, origin, destination, out)
+                job.update({"pass": number + 1, "cursor": [0, 0, 0], "outbound": {}})
+                job.update(return_days=0, return_requests=0)
+            if status == "complete" and not self._compare_round_trips(job, request):
+                status = "cancelled"
+            job["status"] = status
+            if status == "complete" and passes[-1].unsold_from:
+                job["issues"] = [
+                    f"Google vende i voli fino al {'/'.join(passes[-1].horizon.split('-')[::-1])}: "
+                    "le date successive non sono state cercate."
                 ]
-                outbound = [q for q in outbound if q["price"] <= request.budget]
-                if request.trip_type == "one_way":
-                    for quote in outbound:
-                        trip = single_trip(quote, request)
-                        job["results"][trip["id"]] = trip
-                if outbound:
-                    for away, home in return_routes(request, origin, destination):
-                        if self.stopped(job_id):
-                            break
-                        found_back = self.live.search(away, home, back, request, inbound=True)
-                        job["unverified"] += found_back["unverified"]
-                        job["empty_searches"] += int(found_back["empty"])
-                        inbound = [
-                            q
-                            for q in found_back["quotes"]
-                            if matches(q, request, away, home, back, inbound=True)
-                        ]
-                        for a in outbound:
-                            for b in inbound:
-                                pair = combine(a, b, request)
-                                if pair:
-                                    job["results"][pair["id"]] = pair
-                if self.stopped(job_id):
-                    job["status"] = "cancelled"
-                    break  # current task will be retried on resume
-                job["completed"] += 1
-                self._progress(job)
-            else:
-                job["status"] = "complete"
         except LiveBlocked as exc:
             job["status"] = "blocked"
             job["issues"] = [str(exc)]
@@ -183,20 +225,183 @@ class JobManager:
             ]
         finally:
             job["updated_at"] = utc_now()
+            if job["status"] == "complete":
+                job["eta_seconds"] = 0
             with self._lock:
-                if self.get(job_id)["status"] == "cancelling":
+                if self.stored(job_id, "status")[0] == "cancelling":
                     job["status"] = "cancelled"
-                job["rechecks"] = self.get(job_id).get("rechecks", {})
+                job["rechecks"] = json.loads(self.stored(job_id, "rechecks")[0] or "{}")
                 self.save(job)
 
+    def _search(self, job, request, schedule, pace):
+        """Run one schedule from the saved cursor; return the final status.
+
+        The cursor is (day, stage, batch): stage 0 prices the outbound legs of
+        the day, stage 1 the returns its earlier outbounds made worth pricing.
+        A stopped batch is not counted, so it is searched again on resume.
+        Searches use the schedule's request; offers are judged by the user's.
+        """
+        start, stage, batch = job["cursor"]
+        searched, done, prefix = schedule.request, pace["done"], pace["label"]
+        for index in range(start, len(schedule.days)):
+            day = schedule.days[index]
+            base = done + schedule.units_before(index)
+            outs = len(schedule.out_batches) if day in schedule.out_days else 0
+            if stage == 0:
+                for number in range(batch, outs):
+                    origins, destinations = schedule.out_batches[number]
+                    label = f"{airport_list(origins)} → {airport_list(destinations)} · {day}"
+                    if not self._begin(job, prefix + label):
+                        return "cancelled"
+                    found = self.live.search_many(origins, destinations, day, searched)
+                    self._keep_outbound(job, request, day, found)
+                    job["cursor"], job["completed"] = [index, 0, number + 1], base + number + 1
+                    self._advance(job, schedule, pace)
+                stage, batch = 1, 0
+            if day in schedule.outs_for:
+                wanted = self._wanted_returns(job, request, schedule, day)
+                batches = schedule.return_batches(wanted)
+                for number in range(batch, len(batches)):
+                    aways, homes = batches[number]
+                    label = f"Ritorno: {airport_list(aways)} → {airport_list(homes)} · {day}"
+                    if not self._begin(job, prefix + label):
+                        return "cancelled"
+                    found = self.live.search_many(aways, homes, day, searched, inbound=True)
+                    self._combine_returns(job, request, day, found, wanted)
+                    job["cursor"] = [index, 1, number + 1]
+                    job["completed"] = base + outs + min(number + 1, schedule.back_bound)
+                    job["return_requests"] += 1
+                    self._advance(job, schedule, pace)
+                job["return_days"] += 1
+            for key in [k for k in job["outbound"] if schedule.last_back.get(k[-10:], "") <= day]:
+                del job["outbound"][key]  # every return day of that outbound has been priced
+            stage, batch = 0, 0
+            job["cursor"] = [index + 1, 0, 0]
+            job["completed"] = done + schedule.units_before(index + 1)
+        return "complete"
+
+    @staticmethod
+    def _round_trip_key(trip):
+        """Route and dates of a trip that one return ticket could cover, else None."""
+        out, back = trip["outbound"]["segments"], (trip.get("inbound") or {}).get("segments")
+        if not back:
+            return None
+        origin, destination = out[0]["from_code"], out[-1]["to_code"]
+        if (back[0]["from_code"], back[-1]["to_code"]) != (destination, origin):
+            return None
+        return f"{origin}|{destination}|{out[0]['departure'][:10]}|{back[0]['departure'][:10]}"
+
+    def _compare_round_trips(self, job, request):
+        """Compare trips with Google's single-ticket return fares; False if stopped.
+
+        One request covers a route on a pair of dates. The cheapest dates of
+        every route come first, then the other dates by price, up to the cap.
+        """
+        price = {}
+        for trip in job["results"].values():
+            key = self._round_trip_key(trip)
+            if key:
+                price[key] = min(trip["price"], price.get(key, trip["price"]))
+        by_price = sorted(price, key=lambda key: (price[key], key))
+        first = {}
+        for key in by_price:
+            first.setdefault(key[:7], key)  # "VCE|BCN": the cheapest dates of each route
+        ordered = [*first.values(), *(key for key in by_price if first[key[:7]] != key)]
+        fares = job.setdefault("round_trips", {})
+        keys = [key for key in ordered[:ROUND_TRIP_CHECKS] if key not in fares]
+        base = job["completed"]
+        job["total"] = base + len(keys)
+        for number, key in enumerate(keys):
+            origin, destination, out, back = key.split("|")
+            label = f"Confronto con biglietto A/R: {origin} → {destination} · {out}"
+            if not self._begin(job, label):
+                return False
+            found = self.live.round_trip(origin, destination, out, back, request)
+            if found is not None:
+                fares[key] = found
+            job["completed"], job["eta_seconds"] = base + number + 1, len(keys) - number - 1
+            self._progress(job)
+        return True
+
+    def _begin(self, job, label):
+        if self.stopped(job["id"]):
+            return False
+        job["current"] = label
+        self._progress(job)
+        return True
+
+    def _advance(self, job, schedule, pace):
+        job["requests"] += 1
+        pace["requests"] += 1
+        measured = (time.monotonic() - pace["started"]) / pace["requests"]
+        default = seconds_per_search(schedule.request)
+        seconds = measured if pace["requests"] >= PACE_SAMPLE else default
+        share = (
+            job["return_requests"] / (job["return_days"] * schedule.back_bound)
+            if job["return_days"] and schedule.back_bound
+            else 1
+        )
+        left = schedule.remaining(job["cursor"], share) * seconds + pace["later"]
+        job["eta_seconds"] = round(left)
+        self._progress(job)
+
+    def _keep_outbound(self, job, request, day, found):
+        for (origin, destination), result in found.items():
+            job["unverified"] += result["unverified"]
+            job["empty_searches"] += int(result["empty"])
+            outbound = [
+                q
+                for q in result["quotes"]
+                if matches(q, request, origin, destination, day) and q["price"] <= request.budget
+            ]
+            if request.trip_type == "one_way":
+                for quote in outbound:
+                    trip = single_trip(quote, request)
+                    job["results"][trip["id"]] = trip
+            elif outbound:
+                job["outbound"][f"{origin}|{destination}|{day}"] = outbound
+
+    @staticmethod
+    def _wanted_returns(job, request, schedule, day):
+        """Return routes worth pricing on `day`, each with the outbounds it completes."""
+        wanted = {}
+        for out in schedule.outs_for[day]:
+            for origin, destination in schedule.routes:
+                outbound = job["outbound"].get(f"{origin}|{destination}|{out}")
+                if outbound:
+                    for route in return_routes(request, origin, destination):
+                        wanted.setdefault(route, []).extend(outbound)
+        return wanted
+
+    @staticmethod
+    def _combine_returns(job, request, day, found, wanted):
+        for (away, home), result in found.items():
+            job["unverified"] += result["unverified"]
+            job["empty_searches"] += int(result["empty"])
+            inbound = [
+                q for q in result["quotes"] if matches(q, request, away, home, day, inbound=True)
+            ]
+            for a in wanted.get((away, home), ()):
+                for b in inbound:
+                    pair = combine(a, b, request)
+                    if pair:
+                        job["results"][pair["id"]] = pair
+
     def _progress(self, job):
+        # A job of tens of MB takes seconds to write: never spend more than
+        # about a fifth of the time saving.
+        if time.monotonic() - self._saved_at < max(SAVE_INTERVAL, 5 * self._save_cost):
+            return
+        started = time.monotonic()
         job["updated_at"] = utc_now()
         with self._lock:
-            stored = self.get(job["id"])
-            if stored["status"] == "cancelling":
+            status, rechecks = self.stored(job["id"], "status", "rechecks")
+            if status == "cancelling":
                 return
-            job["rechecks"] = stored.get("rechecks", {})
+            job["rechecks"] = json.loads(rechecks or "{}")
             self.save(job)
+        self._saved_at = time.monotonic()
+        self._save_cost = self._saved_at - started
 
     def public(self, job_id, sort="price", offset=0, filters=None, focus=""):
         job = self.get(job_id)
@@ -212,6 +417,8 @@ class JobManager:
         for item in job["results"]:  # only the visible page
             item["round_trip_url"] = round_trip_url(item, request)
         job["plan"] = {k: v for k, v in job["plan"].items() if k != "tasks"}
+        for internal in ("outbound", "cursor", "round_trips"):
+            job.pop(internal, None)
         return job
 
     @staticmethod
@@ -225,9 +432,16 @@ class JobManager:
                 results.pop(result_id, None)
         all_results = list(results.values())
         now = datetime.now(timezone.utc)
+        fares = job.get("round_trips", {})
         for item in all_results:
             age = (now - datetime.fromisoformat(item["checked_at"])).total_seconds()
             item["needs_recheck"] = age > QUOTE_TTL
+            # A cheaper single return ticket with this outbound is only a hint:
+            # Google does not name the return it implies, so it may not be the
+            # one of this trip. The price stays the one of these two flights.
+            fare = fares.get(JobManager._round_trip_key(item) or "", {}).get(item["id"][:24])
+            if fare and fare < item["price"]:
+                item["round_trip_from"] = fare
         return all_results
 
     def export(self, job_id, filters=None):

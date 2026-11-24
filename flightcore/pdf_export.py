@@ -16,7 +16,8 @@ FLAGS = Path(__file__).parents[1] / "static" / "flags"
 LOCAL = ZoneInfo("Europe/Rome")
 DAYS = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"]
 MONTHS = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"]
-PER_CITY = 3
+PER_CITY = 3  # default; the export asks the user
+MAX_PER_CITY = 1000  # only a sanity bound: a city has one line per weekend
 
 INK = (20, 35, 58)
 MUTED = (91, 107, 130)
@@ -66,8 +67,12 @@ def weekend(trip):
     )
 
 
-def by_city(trips):
-    """Cities cheapest first; per city up to PER_CITY distinct weekends."""
+def by_city(trips, per_city=PER_CITY):
+    """Cities cheapest first; per city the per_city cheapest flights.
+
+    Different weekends come first, so a short list still shows variety; the
+    remaining places go to the next cheapest flights of any weekend.
+    """
     grouped = {}
     for trip in trips:  # already sorted by price
         grouped.setdefault(city(destination(trip)), []).append(trip)
@@ -78,8 +83,13 @@ def by_city(trips):
             if weekend(trip) not in seen:
                 seen.add(weekend(trip))
                 picked.append(trip)
-            if len(picked) == PER_CITY:
+            if len(picked) == per_city:
                 break
+        if len(picked) < per_city:
+            chosen = {id(trip) for trip in picked}
+            rest = [trip for trip in items if id(trip) not in chosen]
+            picked += rest[: per_city - len(picked)]
+            picked.sort(key=lambda trip: trip["price"])
         output.append(
             {
                 "name": name,
@@ -204,15 +214,24 @@ def summary_table(pdf, cities, round_trip):
     pdf.text_style(13, "B")
     pdf.cell(0, 8, f"Le mete in breve · {len(cities)} città", new_x="LMARGIN", new_y="NEXT")
     columns = (52, 22, 70, WIDTH - 144)
-    pdf.text_style(8.5, "B", MUTED)
     labels = ("Città", "Da", "Weekend più economico", "Sul posto" if round_trip else "Durata")
-    for width, label in zip(columns, labels, strict=True):
-        pdf.cell(width, 6, label)
-    pdf.ln(6)
+
+    def column_labels():
+        pdf.text_style(8.5, "B", MUTED)
+        for width, label in zip(columns, labels, strict=True):
+            pdf.cell(width, 6, label)
+        pdf.ln(6)
+
+    column_labels()
     for index, item in enumerate(cities):
         best = item["trips"][0]
         origin = city(best["outbound"]["segments"][0]["from_code"])
         minutes = best["useful_minutes"] if round_trip else best["outbound"]["duration_min"]
+        # Band and flag are drawn before the text: break the page first, or the
+        # row would be split with its flag on one page and its text on the next.
+        if pdf.will_page_break(6.4):
+            pdf.add_page()
+            column_labels()
         if index % 2 == 0:
             pdf.set_fill_color(*BAND)
             pdf.rect(MARGIN, pdf.get_y(), WIDTH, 6.4, style="F")
@@ -229,8 +248,12 @@ def summary_table(pdf, cities, round_trip):
 
 
 def city_block(pdf, item, round_trip):
-    """City header and its weekends; never split across pages."""
-    if pdf.get_y() + 9 + 5.5 + ROW * len(item["trips"]) + 5 > pdf.h - 16:
+    """City header and its flights; split across pages only when too long for one."""
+    bottom = pdf.h - 16
+    head = 9 + 5.5
+    whole = head + ROW * len(item["trips"]) + 5
+    fits_a_page = pdf.t_margin + whole <= bottom
+    if pdf.get_y() + (whole if fits_a_page else head + ROW) > bottom:
         pdf.add_page()
     pdf.set_draw_color(*LINE)
     pdf.line(MARGIN, pdf.get_y(), MARGIN + WIDTH, pdf.get_y())
@@ -248,6 +271,8 @@ def city_block(pdf, item, round_trip):
     )
     pdf.cell(0, 5, f"{' · '.join(item['codes'])} · {found}", new_x="LMARGIN", new_y="NEXT")
     for index, trip in enumerate(item["trips"]):
+        if pdf.get_y() + ROW > bottom:
+            pdf.add_page()
         y = pdf.get_y()
         if index == 0:
             pdf.set_fill_color(*HIGHLIGHT)
@@ -270,8 +295,8 @@ def city_block(pdf, item, round_trip):
     pdf.ln(3)
 
 
-def build_pdf(request, trips):
-    cities = by_city(trips)
+def build_pdf(request, trips, per_city=PER_CITY):
+    cities = by_city(trips, per_city)
     round_trip = request["trip_type"] != "one_way"
     pdf = Document()
     pdf.set_title("Voli trovati")

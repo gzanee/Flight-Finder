@@ -10,7 +10,7 @@ import hashlib
 import json
 import math
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from functools import lru_cache
 from itertools import pairwise
@@ -25,6 +25,16 @@ MAX_TRAVELERS = 9
 MAX_BUDGET = 100000
 MAX_DESTINATIONS = 200
 MAX_TASKS = 50000
+# Google accepts up to 10 airports on each side of one search and answers 11
+# with an ErrorResponse (measured 2026-11-12). With non-stop flights the single
+# page lists every flight of every pair: 2x7, 2x10 and 3x7 airports returned
+# exactly the flights and prices of the separate searches, up to 155 rows.
+# With connections Google curates the list (21 of 46 itineraries were missing
+# from a 2x7 search), so those searches stay one route at a time.
+MAX_AIRPORTS_PER_SEARCH = 10
+# Google sells flights up to 330 days ahead and answers any later date with
+# an ErrorResponse (measured 2026-11-12: 8 October 2027 priced, the 9th not).
+GOOGLE_HORIZON_DAYS = 330
 # Council of the EU, Schengen area: Bulgaria/Romania included from 2025.
 # https://www.consilium.europa.eu/en/policies/schengen-area/
 SCHENGEN_COUNTRIES = frozenset(
@@ -362,12 +372,12 @@ def matches(quote, request, origin, destination, day, inbound=False):  # noqa: P
         return False
     if len(segments) - 1 > request.max_stops:
         return False
-    if (
-        not request.allow_self_transfer
-        and len(segments) > 1
-        and quote.get("self_transfer") is not False
-    ):
-        return False  # unknown protection is not a protected connection
+    # Google marks self-transfer itineraries and leaves the flag out on every
+    # other connection, single tickets included (measured 2026-11-12: all 15
+    # Venice-Los Angeles offers of TK, AZ, LH, LX came unmarked). Searches
+    # that refuse self-transfer also ask Google to hide those itineraries.
+    if not request.allow_self_transfer and len(segments) > 1 and quote.get("self_transfer") is True:
+        return False
     if not request.allow_airport_change and any(
         a["to_code"] != b["from_code"] for a, b in pairwise(segments)
     ):
@@ -498,6 +508,128 @@ def return_routes(request, origin, destination):
     return [(away, home) for away in departures for home in homes if away != home]
 
 
+def airports_per_search(request):
+    """How many airports per side one Google search may carry without losing offers."""
+    return MAX_AIRPORTS_PER_SEARCH if request.max_stops == 0 else 1
+
+
+def pair_batches(pairs, size):
+    """Cover exactly the (from, to) pairs with searches of up to `size` airports per side.
+
+    One search prices every combination of its airports, so airports are
+    grouped only when they need the same counterparts: no pair outside
+    `pairs` is ever requested, and no airport is paired with itself.
+    """
+    pairs = list(dict.fromkeys((a, b) for a, b in pairs))
+    if size <= 1:
+        return [((a,), (b,)) for a, b in pairs]
+
+    def grouped(swap):
+        partners = {}
+        for a, b in pairs:
+            key, other = (b, a) if swap else (a, b)
+            partners.setdefault(key, []).append(other)
+        groups = {}
+        for key, others in partners.items():
+            groups.setdefault(tuple(others), []).append(key)
+        batches = []
+        for others, keys in groups.items():
+            for i in range(0, len(keys), size):
+                for j in range(0, len(others), size):
+                    part = (tuple(keys[i : i + size]), others[j : j + size])
+                    batches.append(part[::-1] if swap else part)
+        return batches
+
+    return min(grouped(False), grouped(True), key=len)
+
+
+class Schedule:
+    """Day-by-day work for one request: each flight leg is searched once.
+
+    Days run in order. On each day the outbound legs come first, then the
+    returns of the trips whose outbound, found on an earlier or the same day,
+    fits the budget. Returns therefore depend on what was found, while
+    `total` counts every return that could be needed.
+    """
+
+    def __init__(self, request, destinations, today=None):
+        self.request = request
+        self.size = airports_per_search(request)
+        # Dates Google does not sell yet are left out, and reported as `unsold_from`.
+        self.horizon = ((today or date.today()) + timedelta(days=GOOGLE_HORIZON_DAYS)).isoformat()
+        pairs = [tuple(pair) for pair in request.date_pairs()]
+        self.date_pairs = [pair for pair in pairs if (pair[1] or pair[0]) <= self.horizon]
+        self.unsold_from = min(
+            (p[1] or p[0] for p in pairs if p not in self.date_pairs), default=None
+        )
+        out_days = sorted({out for out, _back in self.date_pairs})
+        self.back_days = sorted({back for _out, back in self.date_pairs if back})
+        self.days = sorted({*out_days, *self.back_days})
+        self.out_days = set(out_days)
+        self.outs_for = {}
+        for out, back in self.date_pairs:
+            if back:
+                self.outs_for.setdefault(back, []).append(out)
+        self.last_back = {}
+        for out, back in self.date_pairs:
+            self.last_back[out] = max(self.last_back.get(out) or "", back or "")
+        self.routes = [(o, d) for d in destinations for o in request.origins if o != d]
+        self.out_batches = pair_batches(self.routes, self.size)
+        self.returns = list(
+            dict.fromkeys(r for o, d in self.routes for r in return_routes(request, o, d))
+        )
+        self.back_bound = len(pair_batches(self.returns, self.size))
+        self.total = len(out_days) * len(self.out_batches) + len(self.back_days) * self.back_bound
+
+    def return_batches(self, wanted):
+        """Searches that price the wanted (away, home) return routes.
+
+        A group search asks every home an airport may return to, also the
+        ones no outbound needs today: one request per group of airports
+        instead of one per distinct set of homes. Never more than `back_bound`.
+        """
+        if self.size == 1:
+            return pair_batches(wanted, 1)
+        aways = {away for away, _home in wanted}
+        return pair_batches([r for r in self.returns if r[0] in aways], self.size)
+
+    def remaining(self, cursor, return_share=1):
+        """Estimated Google requests left from `cursor` on.
+
+        `return_share` is the fraction of the possible returns that the days
+        searched so far really needed.
+        """
+        index, stage, batch = cursor
+        outs = returns = 0
+        for i in range(index, len(self.days)):
+            day, current = self.days[i], i == index
+            if day in self.out_days and not (current and stage):
+                outs += len(self.out_batches) - (batch if current else 0)
+            returns += self.back_bound * (day in self.outs_for)
+        return outs + returns * return_share
+
+    def units_before(self, day_index):
+        """Progress units of the days before `day_index`."""
+        return sum(
+            len(self.out_batches) * (day in self.out_days)
+            + self.back_bound * (day in self.outs_for)
+            for day in self.days[:day_index]
+        )
+
+
+def search_passes(request, destinations, today=None):
+    """Schedules to run in order for one request.
+
+    Connections are priced one route per search. When that means many
+    searches, a first pass prices the non-stop flights in groups, so their
+    trips are saved within minutes and the slow pass only adds connections.
+    """
+    full = Schedule(request, destinations, today)
+    if request.max_stops == 0 or len(full.routes) <= MAX_AIRPORTS_PER_SEARCH:
+        return [full]
+    return [Schedule(replace(request, max_stops=0), destinations, today), full]
+
+
 def build_plan(request, route_map):
     """Present work and coverage before starting; never truncate silently."""
     if request.destinations:
@@ -521,34 +653,32 @@ def build_plan(request, route_map):
             "Riduci il periodo, le destinazioni o l'intervallo di notti."
         )
     # Test the union from every selected origin: do not treat a missing route as absence of service.
-    tasks = [
-        (out, back, dest, origin)
-        for out, back in pairs
-        for dest in candidates
-        for origin in request.origins
-        if dest != origin
-    ]
-    keys = set()
-    upper_bound = 0
-    for out, back, dest, origin in tasks:
-        keys.add((origin, dest, out, False))
-        returns = return_routes(request, origin, dest)
-        upper_bound += 1 + len(returns)
-        if upper_bound > MAX_TASKS * 2:
-            raise SearchValidationError(
-                "Riduci gli aeroporti o le date: troppi controlli di ritorno."
-            )
-        for away, home in returns:
-            keys.add((away, home, back, True))
+    passes = search_passes(request, candidates)
+    schedule = passes[-1]
+    legs = 0
+    for _out, back in pairs:
+        for origin, dest in schedule.routes:
+            legs += 1 + (len(return_routes(request, origin, dest)) if back else 0)
+            if legs > MAX_TASKS * 2:
+                raise SearchValidationError(
+                    "Riduci gli aeroporti o le date: troppi controlli di ritorno."
+                )
+    returns = {r for o, d in schedule.routes for r in return_routes(request, o, d)}
     return {
         "date_pairs": pairs,
         "destinations": candidates,
         "candidate_count": len(candidates),
-        "tasks": tasks,
-        "distinct_searches": len(keys),
-        # Cache entries may expire during a long run. Count every possible call
-        # for a full pass, not just the unique legs that could share a cache hit.
-        "searches_upper_bound": upper_bound,
+        "combinations": task_count,
+        # Route-days that can be priced: every outbound, every possible return.
+        "distinct_searches": len(schedule.out_days) * len(schedule.routes)
+        + len(schedule.back_days) * len(returns),
+        # Google requests of a full pass. Returns are only requested where an
+        # outbound fits the budget, so the real number is usually lower.
+        "searches_upper_bound": sum(p.total for p in passes),
+        "airports_per_search": passes[0].size,
+        "direct_first": len(passes) > 1,
+        # First travel date Google does not sell yet, if the period reaches it.
+        "unsold_from": schedule.unsold_from,
         "coverage": source,
         "origin_route_counts": {o: len(route_map.get(o, [])) for o in request.origins},
         "notice": (

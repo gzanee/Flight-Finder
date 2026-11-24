@@ -6,6 +6,7 @@ Google shopping availability is not an airline ticketing guarantee.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import math
@@ -16,7 +17,13 @@ import time
 from copy import deepcopy
 from datetime import datetime, timezone
 
-from .flexible import fingerprint, local_instant
+from .flexible import (
+    MAX_AIRPORTS_PER_SEARCH,
+    airports_per_search,
+    fingerprint,
+    local_instant,
+    pair_batches,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +44,12 @@ MAX_GOOGLE_ERROR_WAIT = 30
 DEFAULT_REQUEST_INTERVAL = 0.3
 MIN_REQUEST_INTERVAL = 0.3
 MAX_REQUEST_INTERVAL = 10.0
-# Response time plus parsing not hidden by the interval, per search (measured).
-REQUEST_OVERHEAD = 0.2
+# Response time plus parsing, per search, on top of the interval. Measured
+# 2026-11-12: 0.42 s for one route, 0.75 s for a page with up to 10x2 airports.
+REQUEST_OVERHEAD = 0.45
+BATCH_REQUEST_OVERHEAD = 0.75
+PROTOBUF_LENGTH_DELIMITED = 2
+FROM_AIRPORT_FIELD, TO_AIRPORT_FIELD, LEGS_FIELD = 13, 14, 3
 
 
 def request_interval():
@@ -50,6 +61,65 @@ def request_interval():
     if not math.isfinite(configured):
         configured = DEFAULT_REQUEST_INTERVAL
     return min(MAX_REQUEST_INTERVAL, max(MIN_REQUEST_INTERVAL, configured))
+
+
+def seconds_per_search(request):
+    """Expected wall time of one Google request for this kind of search."""
+    overhead = BATCH_REQUEST_OVERHEAD if airports_per_search(request) > 1 else REQUEST_OVERHEAD
+    return request_interval() + overhead
+
+
+def _varint(number):
+    out = bytearray()
+    while True:
+        number, low = number >> 7, number & 0x7F
+        out.append(low | (0x80 if number else 0))
+        if not number:
+            return bytes(out)
+
+
+def _protobuf_field(number, payload):
+    tag = _varint((number << 3) | PROTOBUF_LENGTH_DELIMITED)
+    return tag + _varint(len(payload)) + payload
+
+
+class AirportGroupQuery:
+    """A fast-flights one-way query whose leg lists several airports per side.
+
+    fast-flights models one airport per side, while Google's `tfs` field
+    repeats the airport message. The leg is re-encoded with every airport, in
+    field order; with one airport per side the bytes equal fast-flights' own.
+    """
+
+    def __init__(self, query, origins, destinations):
+        from fast_flights.pb.flights_pb2 import Airport
+
+        self.query, self.origins, self.destinations = query, tuple(origins), tuple(destinations)
+        info = query.pb()
+        leg = info.data[0]
+        leg.ClearField("from_airport")
+        leg.ClearField("to_airport")
+        encoded_leg = leg.SerializeToString() + b"".join(
+            _protobuf_field(field, Airport(airport=code).SerializeToString())
+            for field, codes in (
+                (FROM_AIRPORT_FIELD, self.origins),
+                (TO_AIRPORT_FIELD, self.destinations),
+            )
+            for code in codes
+        )
+        del info.data[:]
+        self._tfs = base64.b64encode(
+            _protobuf_field(LEGS_FIELD, encoded_leg) + info.SerializeToString()
+        ).decode()
+
+    def pb(self):
+        return self.query.pb()
+
+    def params(self):
+        return {**self.query.params(), "tfs": self._tfs}
+
+    def url(self):
+        return self.query.url().replace(self.query.to_str(), self._tfs)
 
 
 class LiveUnavailable(RuntimeError):
@@ -75,14 +145,47 @@ class LiveQuotes:
         self.blocked_until = 0.0
 
     def search(self, origin, destination, day, request, inbound=False, fresh=False):
+        """Live one-way quotes of one route on one day."""
+        found = self.search_many((origin,), (destination,), day, request, inbound, fresh)
+        return found[(origin, destination)]
+
+    def search_many(self, origins, destinations, day, request, inbound=False, fresh=False):
+        """Live one-way quotes of every origin-destination pair, by pair.
+
+        The pairs share one Google request when that loses no offer (see
+        `airports_per_search`); each pair is cached as its own search.
+        """
+        pairs = [(o, d) for o in origins for d in destinations if o != d]
+        keys = {pair: self._key(*pair, day, request, inbound) for pair in pairs}
+        results, missing = {}, []
+        now = time.monotonic()
+        with self._lock:
+            for pair in pairs:
+                hit = self._cache.get(keys[pair])
+                if not fresh and hit and now - hit[0] < QUOTE_TTL:
+                    results[pair] = hit[1]
+                else:
+                    missing.append(pair)
+        size = min(airports_per_search(request), MAX_AIRPORTS_PER_SEARCH)
+        for group in pair_batches(missing, size):
+            found = self._request_group(*group, day, request, inbound)
+            with self._lock:
+                for pair, result in found.items():
+                    if len(self._cache) >= CACHE_LIMIT:
+                        self._cache.pop(next(iter(self._cache)))
+                    self._cache[keys[pair]] = (time.monotonic(), result)
+            results.update(found)
+        return {pair: results[pair] for pair in pairs}
+
+    @staticmethod
+    def _key(origin, destination, day, request, inbound):
         prefix = "return" if inbound else "departure"
-        lo, hi = getattr(request, prefix + "_min"), getattr(request, prefix + "_max")
-        key = (
+        return (
             origin,
             destination,
             day,
-            lo,
-            hi,
+            getattr(request, prefix + "_min"),
+            getattr(request, prefix + "_max"),
             request.adults,
             request.children,
             request.max_stops,
@@ -94,31 +197,55 @@ class LiveQuotes:
             tuple(request.airlines),
             request.exclude_basic_economy,
         )
-        with self._lock:
-            hit = self._cache.get(key)
-            if not fresh and hit and time.monotonic() - hit[0] < QUOTE_TTL:
-                return hit[1]
-        from fast_flights import FlightQuery, Passengers, create_query
 
+    def _request_group(self, origins, destinations, day, request, inbound):
+        """One Google request; a group Google cannot answer is retried pair by pair."""
+        try:
+            return self._request(origins, destinations, day, request, inbound)
+        except LiveBlocked:
+            raise
+        except LiveUnavailable:
+            if len(origins) == len(destinations) == 1:
+                raise
+            logger.info(
+                "Group search %s-%s %s failed; retrying each route", origins, destinations, day
+            )
+        found = {}
+        for origin in origins:
+            for destination in destinations:
+                if origin != destination:
+                    found.update(self._request((origin,), (destination,), day, request, inbound))
+        return found
+
+    @staticmethod
+    def _leg(origin, destination, day, request, inbound):
+        from fast_flights import FlightQuery
+
+        prefix = "return" if inbound else "departure"
+        lo, hi = getattr(request, prefix + "_min"), getattr(request, prefix + "_max")
         # Google accepts whole hours. Widen the upper bound before applying our
         # exact minute filter so 19:59 does not become a cutoff at 19:00.
         upper_hour = int(hi[:2]) + int(hi[3:] != "00")
-        query = create_query(
-            flights=[
-                FlightQuery(
-                    date=day,
-                    from_airport=origin,
-                    to_airport=destination,
-                    earliest_departure_hour=int(lo[:2]),
-                    latest_departure_hour=upper_hour if upper_hour < HOURS_PER_DAY else None,
-                    airlines=list(request.airlines) or None,
-                )
-            ],
+        return FlightQuery(
+            date=day,
+            from_airport=origin,
+            to_airport=destination,
+            earliest_departure_hour=int(lo[:2]),
+            latest_departure_hour=upper_hour if upper_hour < HOURS_PER_DAY else None,
+            airlines=list(request.airlines) or None,
+        )
+
+    @staticmethod
+    def _query(request, legs, trip):
+        from fast_flights import Passengers, create_query
+
+        return create_query(
+            flights=legs,
             passengers=Passengers(
                 adults=request.adults, children=request.children, infants_on_lap=request.infants
             ),
             seat=request.seat,
-            trip="one-way",
+            trip=trip,
             currency=request.currency,
             language="it",
             max_stops=request.max_stops,
@@ -127,11 +254,44 @@ class LiveQuotes:
             hide_separate_and_self_transfer=not request.allow_self_transfer,
             exclude_basic_economy=request.exclude_basic_economy,
         )
+
+    def round_trip(self, origin, destination, out, back, request):
+        """Single-ticket return fares for one route and pair of dates.
+
+        Google lists each outbound with the cheapest round trip that starts
+        with it: {outbound fingerprint: that total}. The return it implies is
+        not named, so this is a "from" price. None when the page cannot be
+        read: a comparison is never worth stopping a finished search for.
+        """
+        legs = [
+            self._leg(origin, destination, out, request, False),
+            self._leg(destination, origin, back, request, True),
+        ]
+        query = self._query(request, legs, "round-trip")
+        try:
+            quotes, _rejected = decode(self._fetch(query), request, query.url())
+        except LiveBlocked:
+            raise
+        except LiveUnavailable:
+            return None
+        fares = {}
+        for quote in quotes:
+            ends = (quote["segments"][0]["from_code"], quote["segments"][-1]["to_code"])
+            if ends == (origin, destination):
+                key = fingerprint(quote)
+                fares[key] = min(quote["price"], fares.get(key, quote["price"]))
+        return fares
+
+    def _request(self, origins, destinations, day, request, inbound):
+        leg = self._leg(origins[0], destinations[0], day, request, inbound)
+        query = self._query(request, [leg], "one-way")
+        if len(origins) > 1 or len(destinations) > 1:
+            query = AirportGroupQuery(query, origins, destinations)
         for attempt in range(GOOGLE_ERROR_RETRIES + 1):
             html = self._fetch(query)
             try:
                 quotes, rejected = decode(
-                    html, request, query.url(), expected_route=(origin, destination)
+                    html, request, query.url(), expected_route=(origins, destinations)
                 )
                 break
             except LiveTransient:
@@ -139,19 +299,30 @@ class LiveQuotes:
                     raise
                 logger.info(
                     "Google error response for %s-%s %s; retry %d/%d",
-                    origin,
-                    destination,
+                    "+".join(origins),
+                    "+".join(destinations),
                     day,
                     attempt + 1,
                     GOOGLE_ERROR_RETRIES,
                 )
                 time.sleep(min(MAX_GOOGLE_ERROR_WAIT, 2 ** (attempt + 1)))
-        result = {"quotes": quotes, "unverified": rejected, "empty": not quotes and not rejected}
-        with self._lock:
-            if len(self._cache) >= CACHE_LIMIT:
-                self._cache.pop(next(iter(self._cache)))
-            self._cache[key] = (time.monotonic(), result)
-        return result
+        by_pair = {(o, d): [] for o in origins for d in destinations if o != d}
+        for quote in quotes:
+            pair = (quote["segments"][0]["from_code"], quote["segments"][-1]["to_code"])
+            if pair in by_pair:
+                by_pair[pair].append(quote)
+            else:
+                rejected += 1  # an offer for airports nobody asked about
+        # A row that could not be decoded belongs to an unknown pair: count it
+        # once, and call no pair of this request empty.
+        return {
+            pair: {
+                "quotes": found,
+                "unverified": rejected if index == 0 else 0,
+                "empty": not found and not rejected,
+            }
+            for index, (pair, found) in enumerate(by_pair.items())
+        }
 
     def _fetch(self, query):
         import primp
@@ -228,18 +399,24 @@ def _is_empty_shopping_response(payload, expected_route):
     """
     try:
         header, locations, filters, context = (payload[0], payload[1], payload[7], payload[12])
-        # Each request in this adapter has exactly one leg and one airport at
-        # either end. Check the resolved locations against that actual request.
+        # Each request in this adapter has exactly one leg. Check the airports
+        # Google resolved at either end against the ones actually requested.
         departure, arrival = locations[0]
-        origin, destination = departure[0][0][0], arrival[0][0][0]
+        origins = [airport[0][0] for airport in departure]
+        destinations = [airport[0][0] for airport in arrival]
         return (
             len(locations) == 1
-            and len(departure) == len(arrival) == 1
-            and isinstance(origin, str)
-            and isinstance(destination, str)
-            and re.fullmatch(r"[A-Z0-9]{3}", origin)
-            and re.fullmatch(r"[A-Z0-9]{3}", destination)
-            and (expected_route is None or (origin, destination) == expected_route)
+            and bool(origins)
+            and bool(destinations)
+            and all(
+                isinstance(code, str) and re.fullmatch(r"[A-Z0-9]{3}", code)
+                for code in origins + destinations
+            )
+            and (
+                expected_route is None
+                or (set(origins), set(destinations))
+                == tuple({side} if isinstance(side, str) else set(side) for side in expected_route)
+            )
             and isinstance(header, list)
             and type(header[2]) is int
             and header[2] == 0
@@ -397,4 +574,3 @@ def round_trip_url(trip, request):
         max_stops=request.max_stops,
     )
     return query.url()
-

@@ -326,6 +326,71 @@ def search(keyword: str, limit: int = 10) -> list[dict]:
     ]
 
 
+# Main international airports by ISO country, to offer every country as a
+# destination even when no catalog lists it. Hand-picked gateways, not a
+# complete list; codes unknown to the catalog are dropped.
+MAIN_AIRPORTS = {
+    "ae": "DXB AUH SHJ", "af": "KBL", "ag": "ANU", "al": "TIA", "am": "EVN", "ao": "LAD",
+    "ar": "EZE AEP COR MDZ", "at": "VIE SZG INN GRZ", "au": "SYD MEL BNE PER ADL", "aw": "AUA",
+    "az": "GYD", "ba": "SJJ", "bb": "BGI", "bd": "DAC", "be": "BRU CRL", "bg": "SOF VAR BOJ",
+    "bh": "BAH", "bn": "BWN", "bo": "VVI LPB", "br": "GRU GIG BSB SSA REC FOR", "bs": "NAS",
+    "bt": "PBH", "bw": "GBE", "by": "MSQ", "bz": "BZE", "ca": "YYZ YVR YUL YYC", "ch": "ZRH GVA",
+    "ci": "ABJ", "cl": "SCL", "cm": "DLA", "cn": "PEK PKX PVG CAN SZX CTU", "co": "BOG MDE CTG",
+    "cr": "SJO LIR", "cu": "HAV VRA", "cv": "SID BVC RAI", "cy": "LCA PFO", "cz": "PRG",
+    "de": "FRA MUC BER DUS HAM", "dk": "CPH BLL", "do": "PUJ SDQ", "dz": "ALG", "ec": "UIO GYE",
+    "ee": "TLL", "eg": "CAI HRG SSH RMF", "es": "MAD BCN AGP PMI ALC", "et": "ADD",
+    "fi": "HEL RVN", "fj": "NAN", "fr": "CDG ORY NCE LYS MRS", "gb": "LHR LGW MAN EDI STN",
+    "ge": "TBS KUT BUS", "gh": "ACC", "gr": "ATH SKG HER RHO CFU", "gt": "GUA", "hk": "HKG",
+    "hn": "SAP", "hr": "ZAG SPU DBV ZAD PUY", "hu": "BUD", "id": "CGK DPS SUB",
+    "ie": "DUB ORK SNN", "il": "TLV", "in": "DEL BOM BLR MAA HYD CCU COK GOI", "iq": "BGW EBL",
+    "ir": "IKA", "is": "KEF", "it": "FCO MXP NAP CTA PMO", "jm": "MBJ KIN", "jo": "AMM AQJ",
+    "jp": "NRT HND KIX NGO FUK", "ke": "NBO MBA", "kg": "FRU BSZ", "kh": "PNH KTI REP SAI",
+    "kr": "ICN GMP PUS CJU", "kw": "KWI", "kz": "ALA NQZ", "la": "VTE LPQ", "lb": "BEY",
+    "lk": "CMB", "lt": "VNO KUN", "lu": "LUX", "lv": "RIX", "ma": "CMN RAK AGA FEZ TNG",
+    "md": "KIV RMO", "me": "TGD TIV", "mg": "TNR", "mk": "SKP", "mm": "RGN", "mn": "UBN",
+    "mo": "MFM", "mt": "MLA", "mu": "MRU", "mv": "MLE", "mx": "MEX CUN GDL", "my": "KUL PEN LGK",
+    "mz": "MPM", "na": "WDH", "ng": "LOS ABV", "nl": "AMS EIN RTM", "no": "OSL BGO TOS",
+    "np": "KTM", "nz": "AKL CHC WLG", "om": "MCT SLL", "pa": "PTY", "pe": "LIM CUZ",
+    "ph": "MNL CEB", "pk": "KHI LHE ISB", "pl": "WAW KRK GDN WRO", "pt": "LIS OPO FAO FNC PDL",
+    "py": "ASU", "qa": "DOH", "ro": "OTP CLJ IAS", "rs": "BEG", "ru": "SVO DME LED", "rw": "KGL",
+    "sa": "JED RUH DMM", "sc": "SEZ", "se": "ARN GOT", "sg": "SIN", "si": "LJU", "sk": "BTS KSC",
+    "sn": "DSS", "sv": "SAL", "th": "BKK DMK HKT CNX USM", "tn": "TUN DJE MIR",
+    "tr": "IST SAW AYT ADB ESB", "tt": "POS", "tw": "TPE", "tz": "DAR ZNZ JRO", "ua": "KBP",
+    "ug": "EBB", "us": "JFK EWR LAX SFO MIA ORD BOS", "uy": "MVD", "uz": "TAS SKD", "ve": "CCS",
+    "vn": "SGN HAN DAD", "xk": "PRN", "za": "JNB CPT DUR", "zm": "LUN", "zw": "HRE VFA",
+}  # fmt: skip
+
+
+def countries(origins: list[str]) -> dict[str, dict]:
+    """Airports to pick a whole country at once, by ISO country code.
+
+    `linked` countries list the candidates of an "Ovunque" search: the route
+    catalogs of the origins, or the general pool for origins without one.
+    The other countries list the airports the portal knows from any catalog,
+    curated set or `MAIN_AIRPORTS`: no direct flight from these origins is on record.
+    Like the catalogs, neither list is exhaustive.
+    """
+    from . import routes
+
+    snapshot = json.loads(routes.SNAPSHOT.read_text())
+    pool = {c for codes in snapshot.values() if isinstance(codes, list) for c in codes}
+    linked = {code for origin in origins for code in routes.destinations(origin.upper())} or pool
+    known = pool | {code for _label, codes in DESTINATION_SETS.values() for code in codes}
+    known |= {code for codes in MAIN_AIRPORTS.values() for code in codes.split()}
+    grouped: dict[str, dict] = {}
+    for is_linked, codes in ((True, linked), (False, known - linked)):
+        for code in sorted(codes):
+            info = details(code)
+            if not exists(code) or not info["country"] or code.upper() in map(str.upper, origins):
+                continue
+            entry = grouped.setdefault(info["country"], {"linked": is_linked, "airports": []})
+            if entry["linked"] == is_linked:
+                entry["airports"].append(
+                    {"code": code, "city": info["city"], "name": info["name"]}
+                )
+    return grouped
+
+
 def destination_set(key: str) -> list[str]:
     """Destinazioni di una rosa, scartando i codici che il catalogo non conosce."""
     _, codes = DESTINATION_SETS.get(key, DESTINATION_SETS[DEFAULT_DESTINATION_SET])

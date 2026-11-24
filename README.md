@@ -9,6 +9,8 @@ e permette di ricontrollare gli stessi voli prima di aprire il venditore.
 
 - Aeroporti cercabili per nome, città o codice IATA; fino a 10 origini e 200
   destinazioni. Origini precompilate: Venezia e Treviso, modificabili.
+- Destinazione anche per paese: scrivendo "Spagna" si aggiungono in un colpo
+  tutti i suoi aeroporti collegati alle origini scelte.
 - Destinazioni candidate complete oppure gruppi come Europa, mare, city break
   e lungo raggio, recuperati dalla ricerca precedente.
 - Date fisse: una partenza e, per l’A/R, un ritorno esatti. Giorni della
@@ -102,17 +104,44 @@ per rotte nuove o con scalo. Le destinazioni esplicite permettono di cercare
 fuori dal bacino. Non scartiamo una rotta solo perché assente da una tabella.
 
 Prima dell’avvio mostriamo il numero di combinazioni e un massimo di richieste.
-Una scansione su molti mesi e aeroporti può richiedere ore. Tutte le modalità
+Ogni volo viene cercato una volta sola, anche se serve a più durate di
+soggiorno, e i ritorni solo dove un’andata rientra nel budget. Una richiesta
+a Google porta fino a **10 aeroporti per lato**: per i voli diretti la pagina
+elenca tutti i voli di ogni coppia, con gli stessi prezzi delle ricerche
+separate (misurato il 12 novembre 2026 fino a 155 voli). Un mese da due
+aeroporti verso 132 destinazioni sono al massimo 812 richieste.
+
+Con più aeroporti Google mostra quasi solo voli diretti, quindi i voli con
+scalo si cercano una rotta per richiesta. Quando le rotte sono molte (più di
+10) la ricerca fa due passate: prima i diretti a gruppi, così i loro viaggi
+arrivano in pochi minuti, poi le coincidenze rotta per rotta, che su un
+periodo lungo possono richiedere ore e si possono fermare quando si vuole.
+
+A ricerca finita i viaggi vengono confrontati con il prezzo di Google per un
+solo biglietto di andata e ritorno: una richiesta per rotta e coppia di date,
+al massimo 150, partendo dalle date più economiche di ogni rotta. Se con lo
+stesso volo di andata il biglietto unico costa meno, il risultato lo segnala
+con un prezzo "da" e "Vedi offerta" apre quella ricerca. Il prezzo del
+risultato resta quello dei due voli mostrati: Google non dice quale ritorno
+comprende il biglietto unico, e può essere un altro.
+
+Uno scalo è accettato se Google non lo segnala come self-transfer: i biglietti
+unici arrivano senza alcun contrassegno, e chi non accetta il self-transfer
+chiede anche a Google di nasconderlo. Tutte le modalità
 usano lo stesso worker seriale, la stessa cache di cinque minuti e lo stesso
 intervallo: **0,3 secondi dopo ogni risposta**, configurabile fra 0,3 e 10 con
 `FLIGHT_FINDER_GOOGLE_INTERVAL`. La connessione con Google viene riusata fra
 una ricerca e l'altra. Si aggiungono i tempi di risposta e gli
 errori di rete: non è una garanzia di durata o di assenza di blocchi.
 
+Google vende i voli fino a 330 giorni da oggi e rifiuta le date successive:
+la ricerca le salta e lo segnala a fine lavoro.
+
 Un errore di connessione viene ritentato al massimo due volte. Un 403/429
 ferma la ricerca e impone una pausa di quindici minuti nel processo.
 Il progresso vive in `.cache/weekends.sqlite3` e può essere ripreso dopo
-un riavvio; i lavori salvati dalla precedente versione restano leggibili.
+un riavvio; i lavori salvati dalla precedente versione restano leggibili e,
+se ripresi, cercano di nuovo conservando i viaggi già trovati.
 `FLIGHT_FINDER_CACHE_DIR` permette di scegliere la directory. Il browser
 ripristina l’ultima ricerca, e il calendario riassume i risultati verificati
 finora senza una seconda scansione.

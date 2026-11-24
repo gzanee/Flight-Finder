@@ -82,7 +82,7 @@ In flessibile il ritorno deve stare entro `end_date`.
 | `airline_mode` | `all` oppure `low_cost`, selezione esplicita di codici |
 | `airlines` | Lista/stringa di codici IATA di due caratteri; filtro su ogni segmento |
 | `max_stops` | 0–3, default 0 |
-| `allow_self_transfer` | Default false; esclude anche la protezione sconosciuta |
+| `allow_self_transfer` | Default false; esclude gli scali che Google segnala come self-transfer |
 | `allow_airport_change` | Default false; preferenza separata per cambio aeroporto nello scalo |
 | `schengen_transfers_only` | Default false; ogni aeroporto di coincidenza deve appartenere a un paese Schengen |
 | `min_layover_minutes`, `max_layover_minutes` | 0–4320, default 0/4320; calcolati in UTC |
@@ -100,9 +100,14 @@ anziché essere ignorato silenziosamente.
 
 `date_pairs` contiene `[andata, ritorno]`; in sola andata `ritorno` è null.
 `destinations`, `candidate_count`, `coverage` descrivono il bacino.
-`distinct_searches` conta le interrogazioni diverse; `searches_upper_bound`
-include i ritorni possibili e le ripetizioni dopo la scadenza della cache.
-`estimated_minutes` stima la sola attesa programmata; rete e retry si aggiungono.
+`combinations` conta date × rotte. `distinct_searches` conta le tratte
+(rotta e giorno) che possono essere quotate; `searches_upper_bound` è il
+massimo di richieste a Google: ogni richiesta porta fino a
+`airports_per_search` aeroporti per lato (10 per i voli diretti, 1 con
+scali) e i ritorni si chiedono solo dove un’andata rientra nel budget. Con
+scali e più di 10 rotte `direct_first` è true: una prima passata cerca i
+diretti a gruppi, la seconda aggiunge le coincidenze. `estimated_minutes` stima intervallo e tempo di risposta; i retry si
+aggiungono.
 
 Più di 50000 combinazioni o 100000 controlli possibili viene rifiutato prima
 della scansione. Non ci sono tagli silenziosi. La copertura Ovunque parte dai
@@ -112,7 +117,12 @@ il bacino generale è solo un insieme di candidati da verificare live.
 ## Avanzamento, risultati e calendario
 
 Gli stati sono `running`, `cancelling`, `cancelled`, `blocked`, `interrupted`,
-`complete`. La risposta include `completed`, `total`, `current`, `issues`,
+`complete`. `completed` e `total` sono in richieste (i ritorni non necessari
+contano come fatti); `eta_seconds` è il tempo residuo stimato sul ritmo
+misurato, null prima delle prime richieste. `price` è sempre la somma dei due
+voli mostrati. Se un solo biglietto A/R con la stessa andata costa meno,
+`round_trip_from` riporta quel prezzo "da": è solo un'indicazione, perché il
+ritorno che comprende può essere un altro. La risposta include `current`, `issues`,
 `empty_searches`, `unverified`, `result_count` e `results` (pagine da 50).
 Parametri GET: `offset` e `sort=price|useful|duration|departure`.
 
@@ -137,9 +147,11 @@ alpha-2 minuscolo, per la bandiera in `static/flags/<country>.png`) (snapshot Wi
 
 `GET /api/search/jobs/<id>/export.pdf` restituisce gli stessi risultati come PDF
 da scaricare (`voli-weekend.pdf`): una pagina di sintesi con una riga per città
-e poi, per ogni città, fino a tre weekend diversi con orari, compagnia, prezzo,
+e poi, per ogni città, i `per_city` voli più economici (da 1 in su, predefinito 3; prima uno per
+weekend diverso, poi gli altri) con orari, compagnia, prezzo,
 ore sul posto e link a Google Flights. Accetta gli stessi filtri della
-consultazione (non `sort`/`offset`) e non chiama Google.
+consultazione (non `sort`/`offset`) e non chiama Google. La pagina chiede
+`per_city` a ogni download.
 
 `recommendations` contiene `cheapest` e, quando disponibili, `longest` e
 `balanced`. Il compromesso richiede più tempo del più economico, non oltre
@@ -208,3 +220,6 @@ I minimi si leggono poi nel campo `calendar` del lavoro.
 - `GET /api/airports?q=...`: autocomplete offline, codice/nome/alias italiani.
 - `GET /api/health`: motore unico, librerie, intervallo e pausa residua.
 - `DELETE /api/cache`: svuota la cache prezzi, conservando un blocco Google attivo.
+- `POST /api/restart`: riavvia il portale (stesso processo, codice e pagine
+  aggiornati). È il pulsante "Riavvia" in alto a destra; una ricerca in corso
+  resta salvata e si riprende dopo.
