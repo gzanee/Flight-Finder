@@ -1,11 +1,51 @@
-# Flight Finder
+<div align="center">
 
-Un solo motore per cercare voli con **date fisse o flessibili**, **sola andata
-oppure andata e ritorno**, da più aeroporti e verso destinazioni specifiche o
-**Ovunque**. La ricerca usa quotazioni Google Flights, conserva l’avanzamento
-e permette di ricontrollare gli stessi voli prima di aprire il venditore.
+# ✈️ Flight Finder
 
-## Il modulo unico
+**Più aeroporti. Date flessibili. Più tempo per viaggiare.**
+
+Cerca voli, confronta combinazioni e scegli quanto vuoi spendere — e quanto tempo vuoi davvero passare a destinazione.
+
+![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Web-Flask-111111?logo=flask&logoColor=white)
+![SQLite](https://img.shields.io/badge/Persistenza-SQLite-003B57?logo=sqlite&logoColor=white)
+![Stato](https://img.shields.io/badge/Stato-in%20sviluppo-F59E0B)
+
+[Funzionalità](#funzionalità) · [Avvio rapido](#avvio-rapido) · [Architettura](#architettura) · [API](docs/API.md) · [Test](#test) · [Dati e limiti](#dati-copertura-e-limiti)
+
+</div>
+
+---
+
+Flight Finder è un'applicazione web per esplorare viaggi con **date fisse o flessibili**, **sola andata o andata e ritorno**, da **più aeroporti di partenza** verso mete specifiche oppure **Ovunque**.
+
+L'idea nasce da una domanda pratica: *dove posso andare, rispettando il mio budget e gli orari che ho a disposizione?* Il motore combina le tratte, mostra l'avanzamento e conserva i risultati, così puoi confrontare le alternative e ricontrollare il prezzo prima di aprire l'offerta su Google Flights.
+
+> **Scegli tu da dove partire.** Puoi cercare dagli aeroporti italiani e internazionali presenti nel catalogo, selezionandoli per nome, città o codice IATA. **Venezia (VCE) e Treviso (TSF) sono soltanto i valori precompilati per comodità dell'autore: puoi rimuoverli e sostituirli.** Non sono un vincolo del motore.
+
+## Funzionalità
+
+| | Cosa puoi fare |
+|---|---|
+| 🌍 **Esplorare le destinazioni** | Scegli aeroporti, un paese o la modalità **Ovunque**. Fino a **10 origini** e **200 destinazioni**. |
+| 📅 **Sfruttare la flessibilità** | Date esatte oppure un intervallo con giorni e durata del soggiorno configurabili. Il preset **Weekend** prepara una ricerca senza limitare le altre modalità. |
+| 🎛️ **Definire il tuo viaggio** | Orari, budget, scali, coincidenze, compagnie, passeggeri, classe e preferenze sui bagagli. |
+| 🧭 **Confrontare le alternative** | Risultati per destinazione, tutti i voli, calendario dei prezzi e suggerimenti basati su **prezzo e tempo sul posto**. |
+| 💾 **Riprendere una ricerca** | Avanzamento e risultati persistiti in SQLite, con arresto e ripresa anche dopo un riavvio. |
+| 🔄 **Ricontrollare i prezzi** | Nuova verifica degli stessi voli e segnalazione delle variazioni, prima di aprire l'offerta. |
+| 📄 **Portare con te i risultati** | Esportazione PDF con sintesi per città, dettagli dei viaggi e link a Google Flights. |
+
+**Esempi di utilizzo**
+
+- Confrontare partenze da **Roma Fiumicino e Ciampino** verso più città.
+- Cercare un viaggio da **Madrid** verso una destinazione specifica, senza usare aeroporti italiani.
+- Impostare un budget e lasciare aperta la meta con **Ovunque**.
+- Cercare un fine settimana compatibile con i propri orari, oppure un ritorno in giornata con **zero notti**.
+
+La scelta libera delle origini e la copertura di **Ovunque** sono due cose diverse: la ricerca esplicita accetta gli aeroporti del catalogo, mentre l'esplorazione automatica usa un insieme di destinazioni candidate **non esaustivo**. [Dettagli sulla copertura](#dati-copertura-e-limiti).
+
+<details>
+<summary><strong>Tutte le opzioni di ricerca</strong></summary>
 
 - Aeroporti cercabili per nome, città o codice IATA; fino a 10 origini e 200
   destinazioni. Origini precompilate: Venezia e Treviso, modificabili.
@@ -35,7 +75,10 @@ e permette di ricontrollare gli stessi voli prima di aprire il venditore.
 La pagina è `/`. I vecchi indirizzi `/classic` e `/weekends` rimandano lì:
 non ci sono più pagine o worker separati.
 
-## Esplora i risultati
+</details>
+
+<details>
+<summary><strong>Filtri, calendario e suggerimenti sui risultati</strong></summary>
 
 - **Per destinazione**: una scheda per aeroporto di arrivo con prezzo minimo,
   numero di combinazioni e anteprima del viaggio migliore per l'ordinamento scelto.
@@ -57,21 +100,124 @@ ricontrolli del prezzo e le rimozioni dei voli non confermati. I suggerimenti
 sono relativi al bacino filtrato e riportano quando il prezzo va aggiornato.
 Con una ricerca incompleta sono esplicitamente parziali.
 
-## Avvio
+</details>
 
-Verificato con Python 3.12.
+## Come si usa
+
+1. **Scegli le origini** e le destinazioni, oppure lascia la meta su **Ovunque**.
+2. **Imposta le date**, il tipo di viaggio e i vincoli che contano per te.
+3. **Controlla il piano**: prima dell'avvio vedi combinazioni e massimo di richieste previste.
+4. **Esplora i risultati** mentre arrivano, confrontandoli per prezzo, durata e tempo a destinazione.
+5. **Ricontrolla il viaggio scelto**, apri l'offerta su Google Flights oppure esporta i risultati in PDF.
+
+I filtri applicati ai risultati già salvati non avviano una nuova scansione di Google.
+
+## Avvio rapido
+
+Verificato con **Python 3.12**. Le dipendenze sono fissate in [requirements.txt](requirements.txt); includono un pacchetto installato da Git, quindi serve anche **Git**.
 
 ```bash
+git clone https://github.com/gzanee/Flight-Finder.git
+cd Flight-Finder
+
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 python app.py
 ```
 
-Apri [il portale locale](http://localhost:5001/). La porta si può cambiare
-con `PORT`. In sviluppo è disponibile anche `flask --app app run`.
+Apri **[http://localhost:5001](http://localhost:5001/)**.
 
-## Dati e verifica
+Su Windows, attiva l'ambiente con `.venv\Scripts\activate` al posto di `source .venv/bin/activate`. In sviluppo è disponibile anche `flask --app app run`.
+
+Non è richiesta una chiave API. La ricerca usa librerie non ufficiali per leggere i dati di Google Flights.
+
+### Configurazione
+
+Le variabili d'ambiente sono opzionali. Per la configurazione locale puoi partire da [.env.example](.env.example).
+
+| Variabile | Comportamento |
+|---|---|
+| `PORT` | Porta del server locale; predefinita `5001`. |
+| `FLASK_DEBUG` | Reload di sviluppo con valore `1`; disattivalo con `0`. |
+| `LOG_LEVEL` | Livello dei log, per esempio `INFO` o `DEBUG`. |
+| `FLIGHT_FINDER_CACHE_DIR` | Directory dei dati locali; il database predefinito è `.cache/weekends.sqlite3`. |
+| `FLIGHT_FINDER_GOOGLE_INTERVAL` | Pausa dopo ogni risposta, da `0.3` a `10` secondi; predefinita `0.3`. |
+
+## Architettura
+
+**Python + Flask** espongono l'interfaccia e le API. Un unico motore gestisce le quattro combinazioni di date e tipo di viaggio, mentre **SQLite** conserva lavori, avanzamento e risultati. L'interfaccia è realizzata con **HTML, CSS e JavaScript**.
+
+```mermaid
+flowchart TD
+    UI["Interfaccia web"] --> API["API Flask"]
+    API --> Worker["Worker di ricerca"]
+    Worker <--> DB[("SQLite: avanzamento e risultati")]
+    Worker --> Google["Google Flights"]
+```
+
+- `flightcore/flexible.py`: richiesta unica, date, pianificazione e filtri.
+- `flightcore/result_browser.py`: filtri sui risultati salvati, gruppi e suggerimenti.
+- `flightcore/live_quotes.py`: query fast-flights, decoder fli, cache e retry.
+- `flightcore/flexible_jobs.py`: un solo worker, persistenza e ricontrollo.
+- `flightcore/flexible_api.py`: pagina e API del motore unico.
+- `static/weekends.*`, `templates/weekends.html`: interfaccia unica.
+- `app.py`: avvio, autocomplete e traduzione delle vecchie richieste.
+
+I nomi di alcuni file conservano “flexible” o “weekends” per continuità;
+tutte le modalità usano questi stessi componenti.
+
+Le API principali sono `/api/search/plan` e `/api/search/jobs`; `/api/flexible/*`
+resta un alias sullo stesso manager. Le vecchie `/api/search`, `/api/explore`
+e `/api/cheapest-dates` traducono i parametri e restituiscono ora **202 con
+l’identificativo del lavoro**, non un elenco sincrono di offerte.
+Vedi [docs/API.md](docs/API.md).
+
+Lettura e scrittura dei lavori passano dallo stesso manager. Cache, pause e gestione dei blocchi sono condivise: le modalità non creano worker indipendenti.
+
+### Un esempio di richiesta
+
+Le origini sono parametri della ricerca, come qualsiasi altro filtro. Per esempio, una sola andata da Madrid a Lisbona:
+
+```json
+{
+  "trip_type": "one_way",
+  "date_mode": "fixed",
+  "origins": ["MAD"],
+  "destinations": ["LIS"],
+  "start_date": "2027-03-12",
+  "budget": 150
+}
+```
+
+È un esempio di payload per `POST /api/search/plan` o `POST /api/search/jobs`, non una promessa di disponibilità o prezzo per quella rotta. Usa date future nell'orizzonte supportato dal provider.
+
+Parametri, risposte, ricontrollo, esportazione e compatibilità con le API precedenti sono documentati in **[docs/API.md](docs/API.md)**.
+
+## Test
+
+```bash
+python -m pytest -q
+python -m ruff check .
+node --check static/weekends.js
+```
+
+I test usano risposte sintetiche senza interrogare Google. Coprono le quattro
+combinazioni tipo viaggio/date, filtri, andata e ritorno verificati,
+coincidenze, gruppi di aeroporti, cache, arresto/ripresa, migrazione dei vecchi
+lavori e ricontrollo. È un servizio locale a processo singolo, senza coda
+condivisa o autenticazione per una pubblicazione multiutente.
+
+## Dati, copertura e limiti
+
+**I risultati sono quotazioni osservate su Google Flights, non conferme dirette delle compagnie.** La ricerca non prenota biglietti e il prezzo può cambiare: ricontrolla l'offerta e le condizioni del venditore prima di acquistare.
+
+Per l'andata e ritorno il prezzo mostrato è la **somma di due biglietti di sola andata**. Quando viene rilevata una tariffa A/R unica più conveniente, è indicata separatamente con un prezzo **“da”**, senza sostituire il totale dei due voli visualizzati.
+
+**Ovunque non significa ogni aeroporto del mondo.** I cataloghi forniscono mete candidate, non confermano rotte o disponibilità. Puoi indicare destinazioni esplicite anche fuori da quel bacino; per origini senza catalogo locale viene usato il bacino generale disponibile.
+
+<details>
+<summary><strong>Prezzi, biglietti, bagagli e verifica dei voli</strong></summary>
 
 Per l’A/R confrontiamo due quotazioni di sola andata e ne sommiamo i prezzi,
 per tutti i viaggiatori. Si tratta di **due biglietti separati**, non di una
@@ -95,7 +241,10 @@ fra i due voli: non stimiamo il tempo né il costo del trasferimento a terra.
 Il filtro Schengen usa i paesi della [lista del Consiglio UE](https://www.consilium.europa.eu/en/policies/schengen-area/)
 e il paese dell’aeroporto; non è una verifica dei requisiti d’ingresso personali.
 
-## Copertura di Ovunque e tempi
+</details>
+
+<details>
+<summary><strong>Copertura, pianificazione, tempi, cache e gestione dei blocchi</strong></summary>
 
 Wikipedia/Wikidata forniscono destinazioni candidate, non disponibilità o
 calendari operativi. Per origini senza catalogo locale usiamo il bacino
@@ -146,38 +295,13 @@ se ripresi, cercano di nuovo conservando i viaggi già trovati.
 ripristina l’ultima ricerca, e il calendario riassume i risultati verificati
 finora senza una seconda scansione.
 
-## Architettura e API
+</details>
 
-- `flightcore/flexible.py`: richiesta unica, date, pianificazione e filtri.
-- `flightcore/result_browser.py`: filtri sui risultati salvati, gruppi e suggerimenti.
-- `flightcore/live_quotes.py`: query fast-flights, decoder fli, cache e retry.
-- `flightcore/flexible_jobs.py`: un solo worker, persistenza e ricontrollo.
-- `flightcore/flexible_api.py`: pagina e API del motore unico.
-- `static/weekends.*`, `templates/weekends.html`: interfaccia unica.
-- `app.py`: avvio, autocomplete e traduzione delle vecchie richieste.
+## Il progetto
 
-I nomi di alcuni file conservano “flexible” o “weekends” per continuità;
-tutte le modalità usano questi stessi componenti.
+Flight Finder nasce da un'esigenza personale di pianificazione dei viaggi ed è in sviluppo attivo, anche con il supporto di agenti AI. Questo repository contiene il portale web e il suo motore di ricerca.
 
-Le API principali sono `/api/search/plan` e `/api/search/jobs`; `/api/flexible/*`
-resta un alias sullo stesso manager. Le vecchie `/api/search`, `/api/explore`
-e `/api/cheapest-dates` traducono i parametri e restituiscono ora **202 con
-l’identificativo del lavoro**, non un elenco sincrono di offerte.
-Vedi [docs/API.md](docs/API.md).
-
-## Verifica
-
-```bash
-python -m pytest -q
-python -m ruff check .
-node --check static/weekends.js
-```
-
-I test usano risposte sintetiche senza interrogare Google. Coprono le quattro
-combinazioni tipo viaggio/date, filtri, andata e ritorno verificati,
-coincidenze, gruppi di aeroporti, cache, arresto/ripresa, migrazione dei vecchi
-lavori e ricontrollo. È un servizio locale a processo singolo, senza coda
-condivisa o autenticazione per una pubblicazione multiutente.
+È pensato come **servizio locale a processo singolo**. Non include autenticazione o una coda condivisa per l'esposizione come servizio pubblico multiutente.
 
 ## Licenza
 
