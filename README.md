@@ -2,119 +2,121 @@
 
 # ✈️ Flight Finder
 
-**Più aeroporti. Date flessibili. Più tempo per viaggiare.**
+**More airports. Flexible dates. More time to travel.**
 
-Cerca voli, confronta combinazioni e scegli quanto vuoi spendere — e quanto tempo vuoi davvero passare a destinazione.
+Search flights, compare combinations and decide how much to spend — and how much time you actually want at your destination.
 
 ![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Flask](https://img.shields.io/badge/Web-Flask-111111?logo=flask&logoColor=white)
-![SQLite](https://img.shields.io/badge/Persistenza-SQLite-003B57?logo=sqlite&logoColor=white)
-![Stato](https://img.shields.io/badge/Stato-in%20sviluppo-F59E0B)
+![SQLite](https://img.shields.io/badge/Storage-SQLite-003B57?logo=sqlite&logoColor=white)
+![Status](https://img.shields.io/badge/Status-in%20development-F59E0B)
 
-[Funzionalità](#funzionalità) · [Avvio rapido](#avvio-rapido) · [Architettura](#architettura) · [API](docs/API.md) · [Test](#test) · [Dati e limiti](#dati-copertura-e-limiti)
+**English** · [Italiano](README.it.md)
+
+[Features](#features) · [Quick start](#quick-start) · [Architecture](#architecture) · [API reference (Italian)](docs/API.md) · [Tests](#tests) · [Data and limitations](#data-coverage-and-limitations)
 
 </div>
 
 ---
 
-Flight Finder è un'applicazione web per esplorare viaggi con **date fisse o flessibili**, **sola andata o andata e ritorno**, da **più aeroporti di partenza** verso mete specifiche oppure **Ovunque**.
+Flight Finder is a web app for exploring trips with **fixed or flexible dates**, **one-way or round-trip itineraries**, from **multiple departure airports** to specific destinations or **Anywhere** ("Ovunque" in the current Italian interface).
 
-L'idea nasce da una domanda pratica: *dove posso andare, rispettando il mio budget e gli orari che ho a disposizione?* Il motore combina le tratte, mostra l'avanzamento e conserva i risultati, così puoi confrontare le alternative e ricontrollare il prezzo prima di aprire l'offerta su Google Flights.
+It starts with a practical question: *where can I go within my budget and the time I have available?* The engine combines flights, shows progress and saves results, so you can compare options and recheck prices before opening an offer on Google Flights.
 
-> **Scegli tu da dove partire.** Puoi cercare dagli aeroporti italiani e internazionali presenti nel catalogo, selezionandoli per nome, città o codice IATA. **Venezia (VCE) e Treviso (TSF) sono soltanto i valori precompilati per comodità dell'autore: puoi rimuoverli e sostituirli.** Non sono un vincolo del motore.
+> **Choose where you fly from.** Search Italian and international airports in the catalog by name, city or IATA code. **Venice (VCE) and Treviso (TSF) are simply the author's convenient defaults: you can remove and replace them.** They do not restrict the search engine.
 
-## Funzionalità
+## Features
 
-| | Cosa puoi fare |
+| | What you can do |
 |---|---|
-| 🌍 **Esplorare le destinazioni** | Scegli aeroporti, un paese o la modalità **Ovunque**. Fino a **10 origini** e **200 destinazioni**. |
-| 📅 **Sfruttare la flessibilità** | Date esatte oppure un intervallo con giorni e durata del soggiorno configurabili. Il preset **Weekend** prepara una ricerca senza limitare le altre modalità. |
-| 🎛️ **Definire il tuo viaggio** | Orari, budget, scali, coincidenze, compagnie, passeggeri, classe e preferenze sui bagagli. |
-| 🧭 **Confrontare le alternative** | Risultati per destinazione, tutti i voli, calendario dei prezzi e suggerimenti basati su **prezzo e tempo sul posto**. |
-| 💾 **Riprendere una ricerca** | Avanzamento e risultati persistiti in SQLite, con arresto e ripresa anche dopo un riavvio. |
-| 🔄 **Ricontrollare i prezzi** | Nuova verifica degli stessi voli e segnalazione delle variazioni, prima di aprire l'offerta. |
-| 📄 **Portare con te i risultati** | Esportazione PDF con sintesi per città, dettagli dei viaggi e link a Google Flights. |
+| 🌍 **Explore destinations** | Select airports, a country or **Anywhere**. Up to **10 origins** and **200 destinations**. |
+| 📅 **Make the most of flexible dates** | Choose exact dates or a range with configurable travel days and length of stay. The **Weekend** preset fills in a search without restricting the other modes. |
+| 🎛️ **Set your travel preferences** | Times, budget, stops, connections, airlines, passengers, cabin class and baggage preferences. |
+| 🧭 **Compare your options** | Browse by destination or view all flights, with a price calendar and suggestions based on **price and time at your destination**. |
+| 💾 **Resume a search** | Progress and results are saved in SQLite, with stop and resume support even after a restart. |
+| 🔄 **Recheck prices** | Check the same flights again and see price changes before opening the offer. |
+| 📄 **Take the results with you** | Export a PDF with city summaries, trip details and Google Flights links. |
 
-**Esempi di utilizzo**
+**Example searches**
 
-- Confrontare partenze da **Roma Fiumicino e Ciampino** verso più città.
-- Cercare un viaggio da **Madrid** verso una destinazione specifica, senza usare aeroporti italiani.
-- Impostare un budget e lasciare aperta la meta con **Ovunque**.
-- Cercare un fine settimana compatibile con i propri orari, oppure un ritorno in giornata con **zero notti**.
+- Compare departures from **Rome Fiumicino and Ciampino** to several cities.
+- Search from **Madrid** to a specific destination without using Italian airports.
+- Set a budget and keep your destination open with **Anywhere**.
+- Find a weekend that fits your schedule, or a same-day return with **zero nights**.
 
-La scelta libera delle origini e la copertura di **Ovunque** sono due cose diverse: la ricerca esplicita accetta gli aeroporti del catalogo, mentre l'esplorazione automatica usa un insieme di destinazioni candidate **non esaustivo**. [Dettagli sulla copertura](#dati-copertura-e-limiti).
+Configurable origins and **Anywhere** coverage are separate things: explicit searches accept airports from the catalog, while automatic exploration uses a **non-exhaustive** set of candidate destinations. [Coverage details](#data-coverage-and-limitations).
 
 <details>
-<summary><strong>Tutte le opzioni di ricerca</strong></summary>
+<summary><strong>All search options</strong></summary>
 
-- Aeroporti cercabili per nome, città o codice IATA; fino a 10 origini e 200
-  destinazioni. Origini precompilate: Venezia e Treviso, modificabili.
-- Destinazione anche per paese: scrivendo "Spagna" si aggiungono in un colpo
-  tutti i suoi aeroporti collegati alle origini scelte.
-- Destinazioni candidate complete oppure gruppi come Europa, mare, city break
-  e lungo raggio, recuperati dalla ricerca precedente.
-- Date fisse: una partenza e, per l’A/R, un ritorno esatti. Giorni della
-  settimana e notti non escludono le date selezionate.
-- Date flessibili: periodo, giorni di partenza/ritorno e soggiorno da 0 a
-  30 notti. Zero notti permette un ritorno in giornata.
-- Il preset **Weekend** compila venerdì dopo le 18, domenica dopo le 18,
-  2 notti: è una scorciatoia dello stesso modulo.
-- Ritorno nello stesso aeroporto oppure in uno del gruppo di origine;
-  ripartenza dallo stesso aeroporto di arrivo oppure da uno del gruppo di
-  destinazione esplicito. Gli spostamenti durante il soggiorno non sono inclusi.
-- Partenze e arrivi al minuto; arrivo finale entro il giorno di viaggio;
-  durata minima/massima delle tratte, inclusi gli scali.
-- Diretti o fino a tre scali, durata minima/massima della coincidenza,
-  self-transfer, cambio di aeroporto durante uno scalo e scali solo in area
-  Schengen come preferenze separate.
-- Adulti, bambini con posto, neonati in braccio; classe, filtro bagagli,
-  compagnie specifiche, selezione low-cost ed esclusione Basic economy.
-- Ordinamento per prezzo totale, tempo a destinazione, durata dei voli o
-  partenza. Riepilogo dei prezzi minimi per data sugli stessi risultati live.
+- Search airports by name, city or IATA code; up to 10 origins and 200
+  destinations. The prefilled Venice and Treviso origins can be changed.
+- Select a destination country: entering "Spagna" (Spain) adds all its
+  airports connected to the selected origins at once.
+- Reuse the full set of candidate destinations from the previous search,
+  or groups such as Europe, seaside, city breaks and long-haul.
+- Fixed dates: an exact departure and, for round trips, an exact return.
+  Weekday and night-count settings do not exclude the selected dates.
+- Flexible dates: a date range, departure/return weekdays and a stay of 0 to
+  30 nights. Zero nights allows a same-day return.
+- The **Weekend** preset fills in Friday after 18:00, Sunday after 18:00
+  and 2 nights: it is a shortcut within the same form.
+- Return to the same airport or another in the origin group; depart back
+  from the arrival airport or another in the explicit destination group.
+  Transfers during the stay are not included.
+- Departure and arrival times to the minute; final arrival within the travel
+  day; minimum/maximum flight duration, including stops.
+- Direct flights or up to three stops, minimum/maximum connection duration,
+  self-transfers, airport changes during a connection and Schengen-only
+  stops as separate preferences.
+- Adults, children with seats and infants on laps; cabin class, baggage
+  filters, specific airlines, low-cost selection and Basic economy exclusion.
+- Sort by total price, time at destination, flight duration or departure.
+  View minimum prices by date using the same live search results.
 
-La pagina è `/`. I vecchi indirizzi `/classic` e `/weekends` rimandano lì:
-non ci sono più pagine o worker separati.
+The page is `/`. The old `/classic` and `/weekends` URLs redirect there:
+there are no longer separate pages or workers.
 
 </details>
 
 <details>
-<summary><strong>Filtri, calendario e suggerimenti sui risultati</strong></summary>
+<summary><strong>Result filters, calendar and suggestions</strong></summary>
 
-- **Per destinazione**: una scheda per aeroporto di arrivo con prezzo minimo,
-  numero di combinazioni e anteprima del viaggio migliore per l'ordinamento scelto.
-  Aprila per vedere tutti i suoi voli oppure passa a **Tutti i voli**.
-- **Affina i risultati**: prezzo massimo totale, tempo minimo a destinazione,
-  origine, destinazione, compagnia su ogni segmento, rientro entro un orario
-  nello stesso giorno e destinazioni da escludere. Un pulsante azzera i filtri.
-- **Tre modi di scegliere**: viaggio più economico, più tempo a destinazione
-  e miglior compromesso. Quest'ultimo mostra euro aggiuntivi e ore guadagnate:
-  ammette al massimo il maggiore tra 20 € e il 50% del prezzo minimo, e
-  3 € per ogni ora guadagnata. Tra i candidati sceglie il costo per ora più
-  basso. Se nessuno conviene, lo dichiara. In sola andata propone solo il più
-  economico; i viaggi con cambio di aeroporto a destinazione non partecipano
-  al confronto del tempo.
+- **By destination**: a card for each arrival airport, with its minimum
+  price, number of combinations and a preview of the best trip for the
+  selected sort order. Open it to see its flights or switch to **All flights**.
+- **Refine results**: maximum total price, minimum time at destination,
+  origin, destination, airline on each segment, return by a particular time
+  on the same day and destinations to exclude. A button resets the filters.
+- **Three ways to choose**: cheapest trip, most time at destination and
+  best trade-off. The last option shows the extra euros and hours gained:
+  it allows an extra cost up to the greater of €20 or 50% of the minimum
+  price, and up to €3 per extra hour. It then picks the lowest cost per
+  additional hour among qualifying trips. If none is worthwhile, it says so.
+  One-way searches only suggest the cheapest option; trips involving an
+  airport change at the destination are excluded from time comparisons.
 
-Filtri, riepiloghi, calendario e suggerimenti lavorano su **tutti** i risultati
-salvati, prima della paginazione, e non interrogano Google. Riflettono anche i
-ricontrolli del prezzo e le rimozioni dei voli non confermati. I suggerimenti
-sono relativi al bacino filtrato e riportano quando il prezzo va aggiornato.
-Con una ricerca incompleta sono esplicitamente parziali.
+Filters, summaries, calendar and suggestions use **all** saved results before
+pagination and do not query Google. They also reflect price rechecks and the
+removal of unconfirmed flights. Suggestions apply to the filtered result set
+and indicate when prices need refreshing. They are explicitly marked as
+partial when the search is incomplete.
 
 </details>
 
-## Come si usa
+## How to use it
 
-1. **Scegli le origini** e le destinazioni, oppure lascia la meta su **Ovunque**.
-2. **Imposta le date**, il tipo di viaggio e i vincoli che contano per te.
-3. **Controlla il piano**: prima dell'avvio vedi combinazioni e massimo di richieste previste.
-4. **Esplora i risultati** mentre arrivano, confrontandoli per prezzo, durata e tempo a destinazione.
-5. **Ricontrolla il viaggio scelto**, apri l'offerta su Google Flights oppure esporta i risultati in PDF.
+1. **Choose your origins** and destinations, or select **Anywhere**.
+2. **Set the dates**, trip type and constraints that matter to you.
+3. **Review the plan**: see the combinations and maximum expected requests before starting.
+4. **Explore results** as they arrive, comparing price, duration and time at destination.
+5. **Recheck your chosen trip**, open it on Google Flights or export the results as a PDF.
 
-I filtri applicati ai risultati già salvati non avviano una nuova scansione di Google.
+Filtering saved results does not start a new Google search.
 
-## Avvio rapido
+## Quick start
 
-Verificato con **Python 3.12**. Le dipendenze sono fissate in [requirements.txt](requirements.txt); includono un pacchetto installato da Git, quindi serve anche **Git**.
+Verified with **Python 3.12**. Dependencies are pinned in [requirements.txt](requirements.txt); one package is installed from Git, so **Git** is also required.
 
 ```bash
 git clone https://github.com/gzanee/Flight-Finder.git
@@ -126,58 +128,58 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-Apri **[http://localhost:5001](http://localhost:5001/)**.
+Open **[http://localhost:5001](http://localhost:5001/)**.
 
-Su Windows, attiva l'ambiente con `.venv\Scripts\activate` al posto di `source .venv/bin/activate`. In sviluppo è disponibile anche `flask --app app run`.
+On Windows, activate the environment with `.venv\Scripts\activate` instead of `source .venv/bin/activate`. You can also use `flask --app app run` during development.
 
-Non è richiesta una chiave API. La ricerca usa librerie non ufficiali per leggere i dati di Google Flights.
+No API key is required. Searches use unofficial libraries to read Google Flights data. The current app interface is in Italian.
 
-### Configurazione
+### Configuration
 
-Le variabili d'ambiente sono opzionali. Per la configurazione locale puoi partire da [.env.example](.env.example).
+Environment variables are optional. Start from [.env.example](.env.example) for local configuration.
 
-| Variabile | Comportamento |
+| Variable | Behavior |
 |---|---|
-| `PORT` | Porta del server locale; predefinita `5001`. |
-| `FLASK_DEBUG` | Reload di sviluppo con valore `1`; disattivalo con `0`. |
-| `LOG_LEVEL` | Livello dei log, per esempio `INFO` o `DEBUG`. |
-| `FLIGHT_FINDER_CACHE_DIR` | Directory dei dati locali; il database predefinito è `.cache/weekends.sqlite3`. |
-| `FLIGHT_FINDER_GOOGLE_INTERVAL` | Pausa dopo ogni risposta, da `0.3` a `10` secondi; predefinita `0.3`. |
+| `PORT` | Local server port; defaults to `5001`. |
+| `FLASK_DEBUG` | Enable development reload with `1`; disable it with `0`. |
+| `LOG_LEVEL` | Log level, such as `INFO` or `DEBUG`. |
+| `FLIGHT_FINDER_CACHE_DIR` | Local data directory; the default database is `.cache/weekends.sqlite3`. |
+| `FLIGHT_FINDER_GOOGLE_INTERVAL` | Pause after each response, from `0.3` to `10` seconds; defaults to `0.3`. |
 
-## Architettura
+## Architecture
 
-**Python + Flask** espongono l'interfaccia e le API. Un unico motore gestisce le quattro combinazioni di date e tipo di viaggio, mentre **SQLite** conserva lavori, avanzamento e risultati. L'interfaccia è realizzata con **HTML, CSS e JavaScript**.
+**Python + Flask** serve the interface and APIs. A single engine handles the four combinations of date mode and trip type, while **SQLite** stores jobs, progress and results. The interface uses **HTML, CSS and JavaScript**.
 
 ```mermaid
 flowchart TD
-    UI["Interfaccia web"] --> API["API Flask"]
-    API --> Worker["Worker di ricerca"]
-    Worker <--> DB[("SQLite: avanzamento e risultati")]
+    UI["Web interface"] --> API["Flask API"]
+    API --> Worker["Search worker"]
+    Worker <--> DB[("SQLite: progress and results")]
     Worker --> Google["Google Flights"]
 ```
 
-- `flightcore/flexible.py`: richiesta unica, date, pianificazione e filtri.
-- `flightcore/result_browser.py`: filtri sui risultati salvati, gruppi e suggerimenti.
-- `flightcore/live_quotes.py`: query fast-flights, decoder fli, cache e retry.
-- `flightcore/flexible_jobs.py`: un solo worker, persistenza e ricontrollo.
-- `flightcore/flexible_api.py`: pagina e API del motore unico.
-- `static/weekends.*`, `templates/weekends.html`: interfaccia unica.
-- `app.py`: avvio, autocomplete e traduzione delle vecchie richieste.
+- `flightcore/flexible.py`: unified request, dates, planning and filters.
+- `flightcore/result_browser.py`: saved-result filters, groups and suggestions.
+- `flightcore/live_quotes.py`: fast-flights queries, fli decoder, cache and retries.
+- `flightcore/flexible_jobs.py`: single worker, persistence and rechecks.
+- `flightcore/flexible_api.py`: page and APIs for the unified engine.
+- `static/weekends.*`, `templates/weekends.html`: unified interface.
+- `app.py`: startup, autocomplete and translation of legacy requests.
 
-I nomi di alcuni file conservano “flexible” o “weekends” per continuità;
-tutte le modalità usano questi stessi componenti.
+Some filenames retain "flexible" or "weekends" for continuity;
+all modes use these same components.
 
-Le API principali sono `/api/search/plan` e `/api/search/jobs`; `/api/flexible/*`
-resta un alias sullo stesso manager. Le vecchie `/api/search`, `/api/explore`
-e `/api/cheapest-dates` traducono i parametri e restituiscono ora **202 con
-l’identificativo del lavoro**, non un elenco sincrono di offerte.
-Vedi [docs/API.md](docs/API.md).
+The main APIs are `/api/search/plan` and `/api/search/jobs`; `/api/flexible/*`
+remains an alias on the same manager. The legacy `/api/search`, `/api/explore`
+and `/api/cheapest-dates` endpoints translate parameters and now return
+**202 with a job ID**, rather than a synchronous list of offers.
+See [docs/API.md](docs/API.md) (currently in Italian).
 
-Lettura e scrittura dei lavori passano dallo stesso manager. Cache, pause e gestione dei blocchi sono condivise: le modalità non creano worker indipendenti.
+Job reads and writes go through the same manager. Cache, delays and block handling are shared: modes do not create independent workers.
 
-### Un esempio di richiesta
+### Example request
 
-Le origini sono parametri della ricerca, come qualsiasi altro filtro. Per esempio, una sola andata da Madrid a Lisbona:
+Origins are search parameters, just like any other filter. For example, a one-way flight from Madrid to Lisbon:
 
 ```json
 {
@@ -190,11 +192,11 @@ Le origini sono parametri della ricerca, come qualsiasi altro filtro. Per esempi
 }
 ```
 
-È un esempio di payload per `POST /api/search/plan` o `POST /api/search/jobs`, non una promessa di disponibilità o prezzo per quella rotta. Usa date future nell'orizzonte supportato dal provider.
+This is an example payload for `POST /api/search/plan` or `POST /api/search/jobs`, not a promise of availability or price on that route. Use future dates within the provider's supported horizon.
 
-Parametri, risposte, ricontrollo, esportazione e compatibilità con le API precedenti sono documentati in **[docs/API.md](docs/API.md)**.
+Parameters, responses, rechecks, exports and legacy API compatibility are documented in **[docs/API.md](docs/API.md)** (Italian).
 
-## Test
+## Tests
 
 ```bash
 python -m pytest -q
@@ -202,109 +204,108 @@ python -m ruff check .
 node --check static/weekends.js
 ```
 
-I test usano risposte sintetiche senza interrogare Google. Coprono le quattro
-combinazioni tipo viaggio/date, filtri, andata e ritorno verificati,
-coincidenze, gruppi di aeroporti, cache, arresto/ripresa, migrazione dei vecchi
-lavori e ricontrollo. È un servizio locale a processo singolo, senza coda
-condivisa o autenticazione per una pubblicazione multiutente.
+Tests use synthetic responses without querying Google. They cover the four
+trip/date combinations, filters, verified outbound/return combinations,
+connections, airport groups, cache, stop/resume, legacy job migration and
+price rechecks. This is a local, single-process service, without a shared
+queue or authentication for a public multi-user deployment.
 
-## Dati, copertura e limiti
+## Data, coverage and limitations
 
-**I risultati sono quotazioni osservate su Google Flights, non conferme dirette delle compagnie.** La ricerca non prenota biglietti e il prezzo può cambiare: ricontrolla l'offerta e le condizioni del venditore prima di acquistare.
+**Results are quotes observed on Google Flights, not direct airline confirmations.** The search does not book tickets and prices can change: recheck the offer and the seller's conditions before purchasing.
 
-Per l'andata e ritorno il prezzo mostrato è la **somma di due biglietti di sola andata**. Quando viene rilevata una tariffa A/R unica più conveniente, è indicata separatamente con un prezzo **“da”**, senza sostituire il totale dei due voli visualizzati.
+For round trips, the displayed price is the **sum of two one-way tickets**. When a cheaper single round-trip fare is found, it is shown separately as a **"from"** price without replacing the total for the two displayed flights.
 
-**Ovunque non significa ogni aeroporto del mondo.** I cataloghi forniscono mete candidate, non confermano rotte o disponibilità. Puoi indicare destinazioni esplicite anche fuori da quel bacino; per origini senza catalogo locale viene usato il bacino generale disponibile.
+**Anywhere does not mean every airport in the world.** Catalogs provide candidate destinations, not confirmation of routes or availability. You can specify destinations outside that set; origins without a local catalog use the available combined pool.
 
 <details>
-<summary><strong>Prezzi, biglietti, bagagli e verifica dei voli</strong></summary>
+<summary><strong>Prices, tickets, baggage and flight verification</strong></summary>
 
-Per l’A/R confrontiamo due quotazioni di sola andata e ne sommiamo i prezzi,
-per tutti i viaggiatori. Si tratta di **due biglietti separati**, non di una
-tariffa A/R unica. In sola andata non vengono eseguite ricerche di ritorno.
+For round trips, the engine compares two one-way quotes and adds their
+prices for all passengers. These are **two separate tickets**, not a single
+round-trip fare. One-way searches do not make return-flight requests.
 
-`verification: google_live` indica dati di shopping osservati su Google:
-numero volo, aeroporti, data, orari e prezzo. Non è una conferma della
-compagnia: `airline_verified` resta `false`. I prezzi più vecchi di cinque
-minuti sono marcati da ricontrollare. Un formato sconosciuto, un blocco o
-un errore di connessione non viene interpretato come zero voli.
+`verification: google_live` indicates shopping data observed on Google:
+flight number, airports, date, times and price. It is not an airline
+confirmation: `airline_verified` remains `false`. Prices older than five
+minutes are flagged for rechecking. An unknown format, a block or a
+connection error is not interpreted as zero flights.
 
-Filtri su orari, scali, durata e compagnie vengono verificati nuovamente sui
-voli restituiti. Classe, bagagli ed esclusione Basic economy sono filtri
-inviati a Google; condizioni e inclusioni esatte vanno confermate dal venditore.
-Il portale non applica sconti per abbonamenti personali come Wizz Discount
-Club o Megavolotea, e non prenota biglietti.
+Time, stop, duration and airline filters are checked again against returned
+flights. Cabin class, baggage and Basic economy exclusion are sent to
+Google; exact conditions and inclusions must be confirmed with the seller.
+The app does not apply personal membership discounts such as Wizz Discount
+Club or Megavolotea, and it does not book tickets.
 
-Il cambio di aeroporto durante il soggiorno è distinto da un cambio durante
-una coincidenza. Con aeroporti di destinazione diversi mostriamo il tempo
-fra i due voli: non stimiamo il tempo né il costo del trasferimento a terra.
-Il filtro Schengen usa i paesi della [lista del Consiglio UE](https://www.consilium.europa.eu/en/policies/schengen-area/)
-e il paese dell’aeroporto; non è una verifica dei requisiti d’ingresso personali.
+An airport change during the stay is separate from one during a connection.
+When destination airports differ, the app shows the time between the two
+flights; it does not estimate ground-transfer time or cost. The Schengen
+filter uses the countries in the [EU Council list](https://www.consilium.europa.eu/en/policies/schengen-area/)
+and the airport's country; it does not check personal entry requirements.
 
 </details>
 
 <details>
-<summary><strong>Copertura, pianificazione, tempi, cache e gestione dei blocchi</strong></summary>
+<summary><strong>Coverage, planning, timing, cache and block handling</strong></summary>
 
-Wikipedia/Wikidata forniscono destinazioni candidate, non disponibilità o
-calendari operativi. Per origini senza catalogo locale usiamo il bacino
-complessivo dei cataloghi disponibili. La copertura è **non esaustiva**, anche
-per rotte nuove o con scalo. Le destinazioni esplicite permettono di cercare
-fuori dal bacino. Non scartiamo una rotta solo perché assente da una tabella.
+Wikipedia/Wikidata provide candidate destinations, not availability or
+operating schedules. Origins without a local catalog use the combined pool
+of available catalogs. Coverage is **non-exhaustive**, including for new
+routes and connecting flights. Explicit destinations allow searches outside
+that pool. A route is not discarded simply because it is absent from a table.
 
-Prima dell’avvio mostriamo il numero di combinazioni e un massimo di richieste.
-Ogni volo viene cercato una volta sola, anche se serve a più durate di
-soggiorno, e i ritorni solo dove un’andata rientra nel budget. Una richiesta
-a Google porta fino a **10 aeroporti per lato**: per i voli diretti la pagina
-elenca tutti i voli di ogni coppia, con gli stessi prezzi delle ricerche
-separate (misurato il 12 novembre 2026 fino a 155 voli). Un mese da due
-aeroporti verso 132 destinazioni sono al massimo 812 richieste.
+Before starting, the app shows the number of combinations and a maximum
+request count. Each flight is searched only once, even when used for several
+lengths of stay, and returns are searched only where an outbound flight fits
+the budget. A Google request carries up to **10 airports per side**: for
+direct flights, the page lists every flight for each pair at the same prices
+as separate searches (measured on November 12, 2026, with up to 155 flights).
+A month from two airports to 132 destinations requires at most 812 requests.
 
-Con più aeroporti Google mostra quasi solo voli diretti, quindi i voli con
-scalo si cercano una rotta per richiesta. Quando le rotte sono molte (più di
-10) la ricerca fa due passate: prima i diretti a gruppi, così i loro viaggi
-arrivano in pochi minuti, poi le coincidenze rotta per rotta, che su un
-periodo lungo possono richiedere ore e si possono fermare quando si vuole.
+With multiple airports, Google mostly shows direct flights, so connecting
+flights are searched one route per request. With many routes (more than 10),
+the search runs in two passes: grouped direct flights first, so those trips
+arrive within a few minutes, then connections route by route. Over a long
+period, the latter can take hours and can be stopped at any time.
 
-A ricerca finita i viaggi vengono confrontati con il prezzo di Google per un
-solo biglietto di andata e ritorno: una richiesta per rotta e coppia di date,
-al massimo 150, partendo dalle date più economiche di ogni rotta. Se con lo
-stesso volo di andata il biglietto unico costa meno, il risultato lo segnala
-con un prezzo "da" e "Vedi offerta" apre quella ricerca. Il prezzo del
-risultato resta quello dei due voli mostrati: Google non dice quale ritorno
-comprende il biglietto unico, e può essere un altro.
+After a search finishes, trips are compared with Google's price for a
+single round-trip ticket: one request per route and date pair, up to 150,
+starting with the cheapest dates for each route. If a single ticket with
+the same outbound flight costs less, the result shows a "from" price and
+the offer link opens that search. The result's own price remains the sum
+of the two displayed flights: Google does not identify the return included
+in the single-ticket fare, and it may be a different flight.
 
-Uno scalo è accettato se Google non lo segnala come self-transfer: i biglietti
-unici arrivano senza alcun contrassegno, e chi non accetta il self-transfer
-chiede anche a Google di nasconderlo. Tutte le modalità
-usano lo stesso worker seriale, la stessa cache di cinque minuti e lo stesso
-intervallo: **0,3 secondi dopo ogni risposta**, configurabile fra 0,3 e 10 con
-`FLIGHT_FINDER_GOOGLE_INTERVAL`. La connessione con Google viene riusata fra
-una ricerca e l'altra. Si aggiungono i tempi di risposta e gli
-errori di rete: non è una garanzia di durata o di assenza di blocchi.
+A connection is accepted if Google does not mark it as a self-transfer:
+single-ticket itineraries arrive without that flag, and disabling
+self-transfers also asks Google to hide them. All modes use the same serial
+worker, five-minute cache and interval: **0.3 seconds after each response**,
+configurable between 0.3 and 10 with `FLIGHT_FINDER_GOOGLE_INTERVAL`.
+The connection to Google is reused between searches. Response times and
+network errors add to this: it is not a guarantee of completion time or
+freedom from blocks.
 
-Google vende i voli fino a 330 giorni da oggi e rifiuta le date successive:
-la ricerca le salta e lo segnala a fine lavoro.
+The engine uses a 330-day Google Flights booking horizon and skips later
+dates, reporting them at the end of the job.
 
-Un errore di connessione viene ritentato al massimo due volte. Un 403/429
-ferma la ricerca e impone una pausa di quindici minuti nel processo.
-Il progresso vive in `.cache/weekends.sqlite3` e può essere ripreso dopo
-un riavvio; i lavori salvati dalla precedente versione restano leggibili e,
-se ripresi, cercano di nuovo conservando i viaggi già trovati.
-`FLIGHT_FINDER_CACHE_DIR` permette di scegliere la directory. Il browser
-ripristina l’ultima ricerca, e il calendario riassume i risultati verificati
-finora senza una seconda scansione.
+A connection error is retried at most twice. A 403/429 stops the search
+and imposes a fifteen-minute pause within the process. Progress is stored
+in `.cache/weekends.sqlite3` and can be resumed after a restart; jobs saved
+by the previous version remain readable and, when resumed, search again
+while retaining trips already found. `FLIGHT_FINDER_CACHE_DIR` selects the
+directory. The browser restores the last search, and the calendar summarizes
+results verified so far without a second scan.
 
 </details>
 
-## Il progetto
+## About the project
 
-Flight Finder nasce da un'esigenza personale di pianificazione dei viaggi ed è in sviluppo attivo, anche con il supporto di agenti AI. Questo repository contiene il portale web e il suo motore di ricerca.
+Flight Finder grew out of a personal travel-planning need and is in active development, with support from AI coding agents. This repository contains the web app and its search engine.
 
-È pensato come **servizio locale a processo singolo**. Non include autenticazione o una coda condivisa per l'esposizione come servizio pubblico multiutente.
+It is designed as a **local, single-process service**. It does not include authentication or a shared queue for deployment as a public multi-user service.
 
-## Licenza
+## License
 
-MIT. Le dipendenze mantengono le loro licenze:
-[punitarani/fli](https://github.com/punitarani/fli) e
+MIT. Dependencies retain their respective licenses:
+[punitarani/fli](https://github.com/punitarani/fli) and
 [AWeirdDev/flights](https://github.com/AWeirdDev/flights).
